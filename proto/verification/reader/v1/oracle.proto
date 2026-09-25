@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package verification.reader.v1;
+
+option go_package = "gat/internal/gen/verification/reader/v1;readerv1";
+
+message Oracle {
+  string tip = 1;
+  repeated Revision revisions = 2;
+  repeated Blob blobs = 3;
+  repeated Directory directories = 4;
+  repeated string gaps = 5;
+}
+
+message Revision {
+  string sha = 1;
+  string tree = 2;
+  string expression = 3;
+}
+
+message Blob {
+  string oid = 1;
+  int64 size = 2;
+  string path = 3;
+  string revision = 4;
+  string label = 5;
+  bytes sha256 = 6;
+}
+
+message Directory {
+  string oid = 1;
+  string path = 2;
+  string revision = 3;
+  repeated Entry entries = 4;
+  bool by_oid = 5;
+}
+
+message Entry {
+  string name = 1;
+  string oid = 2;
+  uint32 mode = 3;
+  int64 size = 4;
+}

@@ -1,0 +1,55 @@
+// Package store implements the small set of object operations needed by a repository.
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"net/url"
+)
+
+var ErrNotFound = errors.New("object not found")
+var ErrConflict = errors.New("object changed: another writer published an update")
+
+// Store must provide atomic whole-object writes and strong read-after-write consistency.
+// Methods may be called concurrently, including writes to independent immutable keys.
+// Get with length=-1 reads the whole object; otherwise it must return exactly length bytes.
+// Successful whole-object reads return an opaque version token, neither empty nor "*".
+// Put condition is empty for unconditional, "*" for create-only, or an opaque Get token.
+// Conditional Put must atomically compare and replace across all clients, returning
+// ErrConflict on mismatch. A read followed by an unconditional write is not CAS.
+// Keys are relative slash-separated paths. Published objects other than HEAD are immutable.
+type Store interface {
+	Get(context.Context, string, int64, int64) ([]byte, string, error)
+	Put(context.Context, string, []byte, string) error
+}
+
+func validKey(key string) error {
+	if !fs.ValidPath(key) || key == "." {
+		return fmt.Errorf("invalid object key %q", key)
+	}
+	return nil
+}
+
+func Open(ctx context.Context, location, endpoint, region string) (Store, error) {
+	u, err := url.Parse(location)
+	if err != nil {
+		return nil, err
+	}
+	switch u.Scheme {
+	case "", "file":
+		if u.Scheme == "file" && u.Host != "" {
+			return nil, fmt.Errorf("file URL must have no host")
+		}
+		root := location
+		if u.Scheme == "file" {
+			root = u.Path
+		}
+		return NewLocal(root)
+	case "s3":
+		return newS3(ctx, u, endpoint, region)
+	default:
+		return nil, fmt.Errorf("unsupported store scheme %q", u.Scheme)
+	}
+}

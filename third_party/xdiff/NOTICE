@@ -1,0 +1,15 @@
+The bounded patch subdivision and indentation scoring in
+internal/repo/patchmyers.go and internal/repo/patchindent.go adapt algorithms
+from Git's LibXDiff, xdiff/xdiffi.c.
+
+LibXDiff by Davide Libenzi
+Copyright (C) 2003 Davide Libenzi <davidel@xmailserver.org>
+
+These adaptations are distributed under the GNU Lesser General Public License,
+version 2.1 or (at your option) any later version. The license text is included
+in LGPL-2.1 in this directory. The adaptations use Go strings and bounded,
+cancelable work instead of the original C data structures; patch subdivision
+keeps the existing explicit work limit instead of introducing an approximate
+result when that limit is exhausted. Blame uses a separate matcher.
+
+Reference source: https://github.com/git/git/blob/master/xdiff/xdiffi.c

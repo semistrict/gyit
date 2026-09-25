@@ -1,0 +1,6 @@
+.build/
+/.testdata/
+/gat
+*.test
+
+__pycache__/

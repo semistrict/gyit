@@ -1,0 +1,207 @@
+syntax = "proto3";
+
+package gat.storage.v1;
+
+option go_package = "gat/internal/gen/gat/storage/v1;storagev1";
+
+// Manifest is stored in HEAD and under its content hash in generations/.
+// Version 6 adds independently compressed, shared directory pages.
+// Version 7 adds a direct blob index. Version 8 adds native source archives
+// and a global blob-size table referenced by the main index.
+message Manifest {
+  uint32 version = 1;
+  string format = 2;
+  reserved 3;
+  reserved "root";
+  PageReference root_page = 5;
+  repeated string tips = 4;
+  PageReference refs = 6;
+  bool revision_graph = 7;
+  string refs_hash = 8;
+  bool commit_metadata = 9;
+  // Optional immutable acceleration index; older readers can ignore it.
+  PageReference history = 10;
+  uint64 history_count = 11;
+  // Optional direct blob index, keyed by binary object ID and chunk number.
+  PageReference blobs = 12;
+}
+
+// Dense topological positions let blame traverse parents within fetched blocks.
+// IDs start at one; each block contains at most 256 positions. Published partial
+// blocks are never extended; the next publication starts at a new block boundary.
+message HistoryPosition { uint64 position = 1; }
+message HistoryBlock { repeated HistoryCommit commits = 1; }
+message HistoryCommit {
+  bytes oid = 1;
+  bytes tree = 2;
+  repeated uint64 parents = 3;
+  // 512 bits, four probes from SHA-256(path), relative to the first parent.
+  // A negative proves unchanged; positives always require an exact tree lookup.
+  bytes changed_paths = 4;
+}
+
+// IndexPage is either a sorted leaf or an internal routing page.
+message IndexPage {
+  repeated IndexItem items = 1;
+  repeated IndexChild children = 2;
+}
+
+message IndexItem {
+  string key = 1;
+  // The key prefix determines the protobuf message type:
+  // o/ = ObjectRecord, p/ = ParentRecord, c/ = CommitRecord, t/ = DirectoryEntry,
+  // b/ and legacy a/ = ChunkRecord, a5/ = AnchorRecord.
+  // In the separate refs index, r/ and a/ = ReferenceRecord.
+  bytes value = 2;
+}
+
+message IndexChild {
+  string max_key = 1;
+  reserved 2;
+  reserved "id";
+  PageReference page = 3;
+}
+
+// An independently verifiable page range inside an immutable index pack.
+message PageReference {
+  string pack = 1;
+  int64 offset = 2;
+  int64 length = 3;
+  string hash = 4;
+}
+
+enum ObjectKind {
+  OBJECT_KIND_UNSPECIFIED = 0;
+  OBJECT_KIND_COMMIT = 1;
+  OBJECT_KIND_TREE = 2;
+  OBJECT_KIND_BLOB = 3;
+}
+
+message ObjectRecord {
+  ObjectKind kind = 1;
+  int64 size = 2;
+  string tree = 3;
+  // Absent in older stores, whose entries reside in the global t/ index.
+  PageReference directory = 4;
+}
+
+// Each page contains at most 128 entries or children, sorted by raw name bytes.
+// Pages are individually Zstandard-compressed and shared across tree versions.
+message DirectoryPage {
+  repeated NamedEntry entries = 1;
+  repeated DirectoryChild children = 2;
+}
+
+message NamedEntry {
+  bytes name = 1;
+  bytes oid = 2;
+  uint32 mode = 3;
+  int64 size = 4;
+  uint32 raw_mode = 5;
+}
+
+message DirectoryChild {
+  bytes max_name = 1;
+  PageReference page = 2;
+}
+
+// Names are encoded in index keys, preserving non-UTF-8 filename bytes.
+message DirectoryEntry {
+  string oid = 1;
+  uint32 mode = 2;
+  int64 size = 3;
+  // Noncanonical source permissions, if different from the normalized mode.
+  uint32 raw_mode = 4;
+}
+
+// A dependency range and its optional parent. Chains end at a full frame.
+message ChunkBase {
+  string pack = 1;
+  int64 offset = 2;
+  int64 length = 3;
+  string hash = 4;
+  ChunkBase base = 5;
+}
+
+message AnchorRecord {
+  repeated ChunkBase candidates = 1;
+}
+
+message ChunkDelta {
+  uint32 size = 1;
+  repeated DeltaOperation operations = 2;
+}
+
+message DeltaOperation {
+  uint32 offset = 1;
+  uint32 length = 2;
+  bytes literal = 3;
+}
+
+message ChunkRecord {
+  string pack = 1;
+  int64 offset = 2;
+  int64 length = 3;
+  string hash = 4;
+  // When present, the payload is a Zstandard-compressed ChunkDelta.
+  ChunkBase base = 5;
+  // Native source archive recipe, authenticated by the enclosing catalog.
+  // Mutually exclusive with pack, offset, length, and base. Hash identifies
+  // the decoded Git object as "git-sha1:<hex object ID>".
+  bytes archive_recipe = 6;
+}
+
+// Ref names and tag object aliases live in a separately replaced index.
+message ReferenceRecord {
+  string commit = 1;
+  // Original object ID, before peeling annotated tags to their final object.
+  string object_id = 2;
+  // Full reference name for symbolic references; empty for direct refs.
+  string symbolic_target = 3;
+}
+
+// Stored under p/<commit>, including an empty record for root commits.
+message ParentRecord { repeated string parents = 1; }
+
+// Bounded display metadata. Message retains up to 24 KiB, author up to 4 KiB;
+// truncation is explicit. Bytes preserve original non-UTF-8 commit text.
+message CommitRecord {
+  bytes author = 1;
+  int64 author_time = 2;
+  int32 author_offset_minutes = 3;
+  int64 commit_time = 4;
+  bytes message = 5;
+  bool message_truncated = 6;
+  bool author_truncated = 7;
+  bytes committer = 8;
+  int32 committer_offset_minutes = 9;
+  bool committer_truncated = 10;
+  // Distinguishes old imports from a present, possibly empty identity.
+  bool has_committer = 11;
+}
+
+// Direct lookup pages. Keys are (binary object ID, chunk number).
+message DirectBlobPage {
+  repeated DirectBlobPart items = 1;
+  repeated DirectBlobChild children = 2;
+}
+
+message DirectBlobPart {
+  bytes oid = 1;
+  uint64 part = 2;
+  uint64 size = 3;
+  ChunkRecord chunk = 4;
+}
+
+message DirectBlobChild {
+  bytes min_oid = 1;
+  uint64 min_part = 2;
+  PageReference page = 3;
+}
+
+// Importer staging record; it is never published directly into the store.
+message DirectBlobStaged {
+  bool size_record = 1;
+  uint64 size = 2;
+  ChunkRecord chunk = 3;
+}

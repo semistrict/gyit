@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package gat.importer.v1;
+
+option go_package = "gat/internal/gen/gat/importer/v1;importerv1";
+
+// Disposable local work records, never part of a published repository.
+// Path hints are opaque bytes, including non-UTF-8 Git names.
+message BlobImportJob {
+  string oid = 1;
+  bytes hint = 2;
+  uint64 size = 3;
+  bytes group = 4;
+  uint64 part = 5;
+  // The body arrives through the bounded in-memory chunk channel.
+  bool wait_for_raw = 6;
+}
+
+message BlobImportBatch {
+  repeated BlobImportJob jobs = 1;
+}
