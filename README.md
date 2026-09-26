@@ -82,7 +82,7 @@ Otherwise a background job fetches **complete history for every branch and tag**
 over Git's ordinary transport, refuses the result if it came back shallow, and
 imports it into gyit's own immutable on-disk format.
 
-Your read blocks for up to three seconds. If setup finishes inside that window
+Your read blocks for up to ten seconds. If setup finishes inside that window
 you just see the real files. If it doesn't, the directory contains exactly one
 file, `NOTICE` — a live progress report, so a slow setup is legible rather than
 a hang — and the whole tree appears later in a single atomic swap. A partial

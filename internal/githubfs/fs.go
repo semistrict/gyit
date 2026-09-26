@@ -240,7 +240,7 @@ func (f *FS) ensureJob(t Target, display string) (*job, error) {
 // start requires f.mu; retries reuse the job and never duplicate active setup.
 func (f *FS) start(j *job) {
 	t := j.target
-	j.noticeAfter = time.Now().Add(3 * time.Second)
+	j.noticeAfter = time.Now().Add(10 * time.Second)
 	done := j.done
 	f.wg.Add(1)
 	go func() {

@@ -87,7 +87,7 @@ func TestNoticeThenAtomicSnapshot(t *testing.T) {
 	f.workers <- struct{}{}
 	started := time.Now()
 	entries, err := f.ReadDir(t.Context(), "acme/project", "", 128)
-	if elapsed := time.Since(started); elapsed < 3*time.Second || elapsed > 5*time.Second {
+	if elapsed := time.Since(started); elapsed < 10*time.Second || elapsed > 12*time.Second {
 		t.Fatalf("NOTICE deadline: %s", elapsed)
 	}
 	if err != nil || len(entries) != 1 || entries[0].Name != "NOTICE" {
@@ -199,7 +199,7 @@ func TestQuickSetupReturnsFilesWithoutPlaceholder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if time.Since(started) >= 3*time.Second {
+	if time.Since(started) >= 10*time.Second {
 		t.Fatal("small local import exceeded synchronous window")
 	}
 	if len(entries) != 2 || f.Generation("acme/project") != 2 {
