@@ -15,14 +15,14 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func allLocalTestEnv(t *testing.T, pack string) {
 	t.Helper()
 	archiveImportEnv(t, pack)
 	packMetadataTestEnv(t)
-	for _, key := range []string{"GIT_GRAFT_FILE", "GIT_REPLACE_REF_BASE", "GIT_NAMESPACE", "GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GAT_DIAGNOSTIC_OBJECTS"} {
+	for _, key := range []string{"GIT_GRAFT_FILE", "GIT_REPLACE_REF_BASE", "GIT_NAMESPACE", "GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GYIT_DIAGNOSTIC_OBJECTS"} {
 		value, present := os.LookupEnv(key)
 		if err := os.Unsetenv(key); err != nil {
 			t.Fatal(err)

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	importerv1 "gat/internal/gen/gat/importer/v1"
+	importerv1 "gyit/internal/gen/gyit/importer/v1"
 	"google.golang.org/protobuf/proto"
 )
 

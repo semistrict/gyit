@@ -18,7 +18,7 @@ func pageLog(ctx context.Context, stdout, stderr io.Writer, produce func(context
 		return produce(ctx, stdout)
 	}
 	pager := "less"
-	for _, key := range []string{"GAT_PAGER", "GIT_PAGER", "PAGER"} {
+	for _, key := range []string{"GYIT_PAGER", "GIT_PAGER", "PAGER"} {
 		if value, ok := os.LookupEnv(key); ok {
 			pager = value
 			break
@@ -40,7 +40,7 @@ func pageLog(ctx context.Context, stdout, stderr io.Writer, produce func(context
 // the network deadline or leave a server worker blocked on terminal input.
 // Use disk, not an output-sized memory buffer; never materialize repository data.
 func spoolLog(ctx context.Context, pager string, stdout, stderr io.Writer, produce func(context.Context, io.Writer) error) error {
-	file, err := os.CreateTemp("", "gat-log-*")
+	file, err := os.CreateTemp("", "gyit-log-*")
 	if err != nil {
 		return err
 	}

@@ -19,7 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--baseline', type=Path, required=True)
-    parser.add_argument('--gat', type=Path, required=True)
+    parser.add_argument('--gyit', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--path', default='drivers/net', help='directory to sample; empty selects repository root')
     parser.add_argument('--versions', type=int, default=64)
@@ -49,7 +49,7 @@ def main():
     if not originals:
         raise ValueError('no source revisions')
     (output / 'source.txt').write_text(f'source={source}\npath={args.path}\n' + '\n'.join(originals) + '\n')
-    with tempfile.TemporaryDirectory(prefix='gat-linux-subset-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='gyit-linux-subset-') as tmp:
         root = Path(tmp)
         sample = root / 'source.git'
         subprocess.run(['git', 'init', '--bare', '-q', str(sample)], check=True, env=env)
@@ -89,7 +89,7 @@ def main():
             raise ValueError(f'sample expands to {raw_bytes} bytes; limit is 4 GiB, reduce --versions')
         print(f'sample: {count} objects, {raw_bytes} decoded bytes', flush=True)
         rows = []
-        for label, executable in [('baseline', args.baseline), ('updated', args.gat)]:
+        for label, executable in [('baseline', args.baseline), ('updated', args.gyit)]:
             executable = executable.resolve()
             store = root / label
             scratch = root / (label + '-scratch')

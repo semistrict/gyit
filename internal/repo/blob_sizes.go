@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"gat/internal/scratchmap"
+	"gyit/internal/scratchmap"
 )
 
 // Blob sizes are import-only lookup data. A fixed-width mapped table avoids

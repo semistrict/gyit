@@ -1,6 +1,6 @@
 # Current import result
 
-On September 25, 2026, the ordinary `gat import` executable imported the complete
+On September 25, 2026, the ordinary `gyit import` executable imported the complete
 cached Linux source in **90.896101 s**, with the existing demo VM running normally.
 It published all **11,839,497 non-tag objects** in stable format 8. Its persistent
 local store occupies **20,433,584,926 bytes** across **2,102 files**. This includes
@@ -208,7 +208,7 @@ Compression now overlaps with Git reads and staging. A fixed ring holds at most
 two chunks per worker; each encoder has its own context. The importer consumes
 completed chunks in submission order, keeping staging and pack writes on one
 goroutine. All outstanding chunks drain before publication. The default selects
-`min(4, GOMAXPROCS)` workers. `GAT_IMPORT_WORKERS=numcpu` makes the cached-fixture
+`min(4, GOMAXPROCS)` workers. `GYIT_IMPORT_WORKERS=numcpu` makes the cached-fixture
 test use `runtime.NumCPU()`; this host reports 15 CPUs.
 
 Initial full-history concurrency probes (CPU profiling enabled) measured:
@@ -364,9 +364,9 @@ checks the switched file, unchanged inode IDs, and an old pinned open handle.
 Reproduce, reusing the ignored clone and cleaning each temporary destination:
 
 ```sh
-GAT_MEDIUM_TEST=1 GAT_NO_DELTAS=1 go test ./internal/repo \
+GYIT_MEDIUM_TEST=1 GYIT_NO_DELTAS=1 go test ./internal/repo \
   -run '^TestMediumRepository$' -v -count=1 -timeout=10m
-GAT_MEDIUM_TEST=1 GAT_NO_DELTAS=0 go test ./internal/repo \
+GYIT_MEDIUM_TEST=1 GYIT_NO_DELTAS=0 go test ./internal/repo \
   -run '^TestMediumRepository$' -v -count=1 -timeout=10m
 ```
 
@@ -476,15 +476,15 @@ Reproduce the full comparison (about twelve minutes here, all destinations
 removed after their individual tests):
 
 ```sh
-GAT_DELTA_MATRIX=1 go test ./internal/repo -run '^TestDeltaMatrix$' -v -count=1 -timeout=30m
+GYIT_DELTA_MATRIX=1 go test ./internal/repo -run '^TestDeltaMatrix$' -v -count=1 -timeout=30m
 ```
 
 Or select a setting:
 
 ```sh
-GAT_MEDIUM_TEST=1 GAT_DELTA_DEPTH=4 GAT_DELTA_CANDIDATES=4 \
+GYIT_MEDIUM_TEST=1 GYIT_DELTA_DEPTH=4 GYIT_DELTA_CANDIDATES=4 \
   go test ./internal/repo -run '^TestMediumRepository$' -v -count=1 -timeout=10m
-./gat import --repo /path/to/repo --store /path/to/objects --delta-depth 4 --delta-candidates 4
+./gyit import --repo /path/to/repo --store /path/to/objects --delta-depth 4 --delta-candidates 4
 ```
 
 The importer writes format 5. Version 4 stores remain readable, and their full
@@ -519,15 +519,15 @@ The earlier decoded-page cache experiment was reverted: it increased metadata re
 Reproduce (the source clone and imported store must already exist; no cloning or fetching):
 
 ```sh
-GAT_MEDIUM_PARITY_TEST=1 go test ./internal/controlcli -run '^TestMediumCommandParity$' -v -count=1
+GYIT_MEDIUM_PARITY_TEST=1 go test ./internal/controlcli -run '^TestMediumCommandParity$' -v -count=1
 go test ./internal/repo -run '^$' -bench '^BenchmarkBlameMedium$' -benchtime=1x -count=3
 GOOS=linux GOARCH=arm64 go test -c -o .build/repo-history.test ./internal/repo
-limactl shell default env GAT_BENCH_STORE=/Users/ramon/src/gat/.testdata/lima-store \
-  /Users/ramon/src/gat/.build/repo-history.test \
+limactl shell default env GYIT_BENCH_STORE=$HOME/src/gyit/.testdata/lima-store \
+  $HOME/src/gyit/.build/repo-history.test \
   -test.run '^$' -test.bench '^BenchmarkBlameMedium$' -test.benchtime=1x -test.count=3
 ```
 
-Set `GAT_BENCH_STORE` or `GAT_PARITY_STORE` to select another imported store. Raw logs: `.build/history-benchmark-host-final.log`, `.build/history-benchmark-lima-final.log`, `.build/history-medium-import.log`, `.build/medium-parity-final.log`. The integration suite compares actual binary output byte for byte, including blank-line attribution; diff rename detection is explicitly disabled on both sides. Supported cases are listed in `internal/controlcli/medium_parity_test.go`.
+Set `GYIT_BENCH_STORE` or `GYIT_PARITY_STORE` to select another imported store. Raw logs: `.build/history-benchmark-host-final.log`, `.build/history-benchmark-lima-final.log`, `.build/history-medium-import.log`, `.build/medium-parity-final.log`. The integration suite compares actual binary output byte for byte, including blank-line attribution; diff rename detection is explicitly disabled on both sides. Supported cases are listed in `internal/controlcli/medium_parity_test.go`.
 
 Validation for this change: the complete race-enabled suite (`go test -race
 ./...`), the opt-in full medium import, exact binary-output integration suite,
@@ -537,10 +537,10 @@ inodes; it was unmounted and removed. The temporary native Git worktree was
 removed as well. Structured review reported no actionable findings:
 
 ```sh
-/Users/ramon/.agents/skills/autoreview/scripts/autoreview --mode local \
+autoreview --mode local \
   --prompt-file .build/history-index-scope.md \
-  --output /tmp/gat-history-index-review.log \
-  --json-output /tmp/gat-history-index-review.json
+  --output /tmp/gyit-history-index-review.log \
+  --json-output /tmp/gyit-history-index-review.json
 ```
 
 ## File history
@@ -638,10 +638,10 @@ memory is bounded; allocation volume is reported by the benchmarks.
 Repeat without cloning or fetching:
 
 ```sh
-GAT_MEDIUM_PARITY_TEST=1 go test ./internal/controlcli -run TestMediumCommandParity -count=1 -v
+GYIT_MEDIUM_PARITY_TEST=1 go test ./internal/controlcli -run TestMediumCommandParity -count=1 -v
 go test ./internal/repo -run '^$' -bench 'Benchmark(ObjectViewsMedium|ReferenceViewsMedium|ViewGraphMedium|ShowMedium)$' -benchtime=3x -count=1
 GOOS=linux GOARCH=arm64 go test -c -o .build/repo-views.test ./internal/repo
-limactl shell default env GAT_BENCH_STORE=/Users/ramon/src/gat/.testdata/lima-store /Users/ramon/src/gat/.build/repo-views.test -test.run '^$' -test.bench 'Benchmark(ObjectViewsMedium|ReferenceViewsMedium|ViewGraphMedium|ShowMedium)$' -test.benchtime=3x
+limactl shell default env GYIT_BENCH_STORE=$HOME/src/gyit/.testdata/lima-store $HOME/src/gyit/.build/repo-views.test -test.run '^$' -test.bench 'Benchmark(ObjectViewsMedium|ReferenceViewsMedium|ViewGraphMedium|ShowMedium)$' -test.benchtime=3x
 ```
 
 Native parity includes real protobuf streaming/CLI, object/graph/reference
@@ -767,7 +767,7 @@ index/reverse index; it never clones, fetches, or imports the source:
 python3 scripts/sample_native_deltas.py \
   --pack /path/to/existing/objects/pack/pack-HASH.pack \
   --output .testdata/native-delta-sample
-GAT_NATIVE_DELTA_BENCH=1 go test ./internal/repo \
+GYIT_NATIVE_DELTA_BENCH=1 go test ./internal/repo \
   -run '^TestNativeDeltaSampleWireMatchesGit$' \
   -bench '^BenchmarkNativeDeltaSample$' -benchtime=3x -count=3 -v
 ```
@@ -842,7 +842,7 @@ Further work must address source object conversion and its pipeline costs.
 Reproduce metadata sampling with the cached single-pack Linux source:
 
 ```sh
-GAT_LINUX_METADATA_BENCH=1 go test ./internal/repo -run '^$' \
+GYIT_LINUX_METADATA_BENCH=1 go test ./internal/repo -run '^$' \
   -bench '^BenchmarkPrepareObjectHintsLinuxSample/permuted/1000000$' \
   -benchtime=1x -count=1 -timeout=30s
 ```
@@ -998,7 +998,7 @@ writes in the same worker. Multi-chunk blobs still stream once through the
 foreground reader, with chunks routed to their original candidate lanes. The
 existing codec and delta selection are shared by both pipelines. All workers
 must finish before index publication or cleanup. The default remains at most
-four workers; `gat import --workers 8` selects an explicit count.
+four workers; `gyit import --workers 8` selects an explicit count.
 
 A 512-revision directory fixture borrowed cached Linux objects and expanded to
 1,857,094,302 bytes across 55,680 objects. Each import had a 25 s process-group
@@ -1026,8 +1026,8 @@ the bounded real-data comparison can be repeated with:
 
 ```sh
 python3 scripts/benchmark_linux_subset.py \
-  --source .testdata/linux-repo.git --baseline .build/gat-metadata-parallel \
-  --gat .build/gat-blob-pipeline --versions 512 --workers 15 --timeout 25 \
+  --source .testdata/linux-repo.git --baseline .build/gyit-metadata-parallel \
+  --gyit .build/gyit-blob-pipeline --versions 512 --workers 15 --timeout 25 \
   --output .build/blob-pipeline-comparison
 ```
 
@@ -1051,7 +1051,7 @@ commit positions, changed-path filters, and mounted readers are unchanged.
 Run the bounded real-history benchmark with:
 
 ```sh
-GAT_LINUX_HISTORY_BENCH=1 go test ./internal/repo -run '^$' \
+GYIT_LINUX_HISTORY_BENCH=1 go test ./internal/repo -run '^$' \
   -bench '^BenchmarkHistoryStreamLinux$' -benchtime=1x -count=3
 ```
 
@@ -1163,8 +1163,8 @@ builds, so wrappers are unnecessary:
 
 ```sh
 python3 scripts/benchmark_linux_subset.py \
-  --source .testdata/linux-repo.git --baseline .build/gat-tree-parallel \
-  --gat .build/gat-blob-job-spool-production \
+  --source .testdata/linux-repo.git --baseline .build/gyit-tree-parallel \
+  --gyit .build/gyit-blob-job-spool-production \
   --baseline-workers 15 --workers 15 --versions 512 --timeout 25 \
   --output .build/queue-repeat
 ```
@@ -1207,7 +1207,7 @@ read verification is available. The failed destination and scratch were removed.
 Do not repeat the full run using the old estimate; the current guard is stricter.
 
 The main structural difference from a local clone remains: the 6,448,271,473-byte
-source pack represents 162,308,101,302 expanded object bytes (25.17x). Gat rebuilds
+source pack represents 162,308,101,302 expanded object bytes (25.17x). gyit rebuilds
 blob encodings, directory pages, object indexes, and changed-path history;
 the no-hardlink local clone reuses existing packed representations. This is work
 amplification, not a measured 25.17x elapsed-time attribution to compression.

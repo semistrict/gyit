@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/control"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 type logFixture struct {
@@ -69,7 +69,7 @@ func (h *logFixture) serve() {
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp("", "gat-history-")
+	dir, err := os.MkdirTemp("", "gyit-history-")
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func (h *logFixture) compare(args ...string) {
 	want := h.git(append([]string{"log"}, args...)...)
 	var out, stderr bytes.Buffer
 	if err := Run(context.Background(), append([]string{"log", "--socket", h.socket}, args...), &out, &stderr); err != nil {
-		h.t.Fatalf("gat log %v: %v %s", args, err, &stderr)
+		h.t.Fatalf("gyit log %v: %v %s", args, err, &stderr)
 	}
 	if !bytes.Equal(out.Bytes(), want) {
 		h.t.Fatalf("log %v:\n got %q\nwant %q", args, out.Bytes(), want)

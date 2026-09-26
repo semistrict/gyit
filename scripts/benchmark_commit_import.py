@@ -16,7 +16,7 @@ from benchmark_budget import run_capped
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', type=Path, required=True)
-    parser.add_argument('--gat', type=Path, required=True)
+    parser.add_argument('--gyit', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--commits', type=int, default=10000)
     args = parser.parse_args()
@@ -26,7 +26,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1')
     rows = []
-    with tempfile.TemporaryDirectory(prefix='gat-commit-sample-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='gyit-commit-sample-') as tmp:
         root = Path(tmp)
         source = root / 'source.git'
         subprocess.run(['git', 'init', '--bare', '-q', str(source)], check=True, env=env, timeout=10)
@@ -44,7 +44,7 @@ def main():
                        check=True, env=env, timeout=10)
         sha = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], env=env, timeout=10).decode().strip()
         (output / 'source.txt').write_text(f'commits={args.commits}\nsha={sha}\n')
-        for label, executable in [('baseline', args.baseline), ('updated', args.gat)]:
+        for label, executable in [('baseline', args.baseline), ('updated', args.gyit)]:
             executable = executable.resolve()
             storage = root / label
             with (output / f'{label}.out').open('wb') as out, (output / f'{label}.err').open('wb') as err:

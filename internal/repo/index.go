@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"gat/internal/spill"
-	"gat/internal/store"
+	"gyit/internal/spill"
+	"gyit/internal/store"
 	bolt "go.etcd.io/bbolt"
 )
 

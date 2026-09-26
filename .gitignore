@@ -1,6 +1,15 @@
 .build/
 /.testdata/
-/gat
+/gyit
 *.test
 
 __pycache__/
+
+.DS_Store
+*.provisionprofile
+*.mobileprovision
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example

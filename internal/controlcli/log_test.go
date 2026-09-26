@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 func TestLogMatchesNativeGit(t *testing.T) {
@@ -74,7 +74,7 @@ func TestLogMatchesNativeGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := control.New(repository, selected)
-	dir, err := os.MkdirTemp("", "gat-log-")
+	dir, err := os.MkdirTemp("", "gyit-log-")
 	if err != nil {
 		t.Fatal(err)
 	}

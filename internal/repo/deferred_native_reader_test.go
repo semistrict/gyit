@@ -13,9 +13,9 @@ import (
 	"sync"
 	"testing"
 
-	probev1 "gat/internal/gen/gat/probe/v1"
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/store"
+	probev1 "gyit/internal/gen/gyit/probe/v1"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 

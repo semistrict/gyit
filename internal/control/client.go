@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gat/internal/repo"
+	"gyit/internal/repo"
 	"time"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 // RemoteError preserves the server's typed protobuf error code.

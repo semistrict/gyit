@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"path"
 
-	"gat/internal/pathspec"
+	"gyit/internal/pathspec"
 )
 
 var stopTreeWalk = errors.New("stop tree walk")

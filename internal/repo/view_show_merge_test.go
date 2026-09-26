@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"testing"
 
-	"gat/internal/pathspec"
-	"gat/internal/store"
+	"gyit/internal/pathspec"
+	"gyit/internal/store"
 )
 
 func TestCombinedMergeNoPatchAndConflict(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	sizewire "gat/internal/globalsizes/wire"
-	"gat/internal/store"
+	sizewire "gyit/internal/globalsizes/wire"
+	"gyit/internal/store"
 )
 
 func globalTestData(t *testing.T, id [20]byte, size uint32) []byte {

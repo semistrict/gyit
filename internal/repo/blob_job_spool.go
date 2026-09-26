@@ -10,7 +10,7 @@ import (
 	"os"
 	"sync/atomic"
 
-	importerv1 "gat/internal/gen/gat/importer/v1"
+	importerv1 "gyit/internal/gen/gyit/importer/v1"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
@@ -74,7 +74,7 @@ func (q *blobJobSpool) add(j blobImportJob, raw bool) error {
 	if (len(j.oid) != 40 && len(j.oid) != 64) || len(j.hint)+len(j.group) > 1<<20 || j.size < 0 || j.size > ChunkSize || j.part < 0 {
 		return fmt.Errorf("invalid blob work record")
 	}
-	// The wire layout is defined in gat/importer/v1/importer.proto. Avoid one
+	// The wire layout is defined in gyit/importer/v1/importer.proto. Avoid one
 	// generated allocation per queued field; tests use the generated decoder.
 	b := make([]byte, 0, len(j.oid)+len(j.hint)+len(j.group)+48)
 	for _, f := range []struct {

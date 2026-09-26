@@ -12,7 +12,7 @@ import (
 	"sort"
 	"unsafe"
 
-	"gat/internal/globalsizes/wire"
+	"gyit/internal/globalsizes/wire"
 )
 
 const (

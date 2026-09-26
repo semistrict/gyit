@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func showRenameFixture(t *testing.T, edited bool) (*Snapshot, *Snapshot, string, []showChange) {

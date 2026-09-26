@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestPreloadedImportConcurrentPublication(t *testing.T) {

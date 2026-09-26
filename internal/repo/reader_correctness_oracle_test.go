@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	readerv1 "gat/internal/gen/verification/reader/v1"
-	"gat/internal/store"
+	readerv1 "gyit/internal/gen/verification/reader/v1"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -135,7 +135,7 @@ func correctnessTree(t *testing.T, ctx context.Context, source, oid string, recu
 
 func correctnessPrepareOracle(t *testing.T, ctx context.Context, source, dir string) *readerv1.Oracle {
 	t.Helper()
-	rev := os.Getenv("GAT_CORRECTNESS_REVISION")
+	rev := os.Getenv("GYIT_CORRECTNESS_REVISION")
 	if rev == "" {
 		rev = "HEAD"
 	}
@@ -319,7 +319,7 @@ func correctnessPrepareOracle(t *testing.T, ctx context.Context, source, dir str
 	// Choose compiled representation by stored metadata only. Its expected
 	// entries still come entirely from Git, and the child reads the tree through
 	// public ReadDir/Lookup without assuming it belongs to the selected checkout.
-	backend, err := store.NewLocal(os.Getenv("GAT_CORRECTNESS_STORE"))
+	backend, err := store.NewLocal(os.Getenv("GYIT_CORRECTNESS_STORE"))
 	if err != nil {
 		t.Fatal(err)
 	}

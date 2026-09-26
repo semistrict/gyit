@@ -8,7 +8,7 @@ import (
 	"math"
 	"sort"
 
-	archivev1 "gat/internal/gen/gat/sourcearchive/v1"
+	archivev1 "gyit/internal/gen/gyit/sourcearchive/v1"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )

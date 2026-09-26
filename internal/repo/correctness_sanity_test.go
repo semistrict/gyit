@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestCorrectnessHarnessTinyPersistentStore(t *testing.T) {
@@ -83,7 +83,7 @@ func TestCorrectnessHarnessTinyPersistentStore(t *testing.T) {
 		t.Fatal(e)
 	}
 	cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestCorrectnessHarnessFailureChild$", "-test.timeout=20s")
-	cmd.Env = append(os.Environ(), "GAT_CORRECTNESS_FAILURE_CHILD="+string(config))
+	cmd.Env = append(os.Environ(), "GYIT_CORRECTNESS_FAILURE_CHILD="+string(config))
 	output, e := cmd.CombinedOutput()
 	var exit *exec.ExitError
 	if !errors.As(e, &exit) || exit.ExitCode() != 1 {
@@ -107,7 +107,7 @@ func TestCorrectnessHarnessTinyPersistentStore(t *testing.T) {
 }
 
 func TestCorrectnessHarnessFailureChild(t *testing.T) {
-	raw := os.Getenv("GAT_CORRECTNESS_FAILURE_CHILD")
+	raw := os.Getenv("GYIT_CORRECTNESS_FAILURE_CHILD")
 	if raw == "" {
 		t.Skip("tiny intended-failure child only")
 	}

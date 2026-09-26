@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -212,10 +212,10 @@ func TestReferenceMetadataUpgradeAndQuietNoMatch(t *testing.T) {
 }
 
 func TestReferenceViewsMediumParity(t *testing.T) {
-	if os.Getenv("GAT_MEDIUM_PARITY_TEST") != "1" {
-		t.Skip("set GAT_MEDIUM_PARITY_TEST=1 with the imported medium fixture")
+	if os.Getenv("GYIT_MEDIUM_PARITY_TEST") != "1" {
+		t.Skip("set GYIT_MEDIUM_PARITY_TEST=1 with the imported medium fixture")
 	}
-	dir := os.Getenv("GAT_PARITY_STORE")
+	dir := os.Getenv("GYIT_PARITY_STORE")
 	if dir == "" {
 		dir = "../../.testdata/lima-store"
 	}
@@ -258,12 +258,12 @@ func TestReferenceViewsMediumParity(t *testing.T) {
 // No clone, network access or fixture mutation. Use -benchtime=3x for repeated
 // cold-cache measurements; each iteration starts with a fresh bounded cache.
 func BenchmarkReferenceViewsMedium(b *testing.B) {
-	dir := os.Getenv("GAT_BENCH_STORE")
+	dir := os.Getenv("GYIT_BENCH_STORE")
 	if dir == "" {
 		dir = "../../.testdata/lima-store"
 	}
 	if _, err := os.Stat(filepath.Join(dir, "HEAD")); err != nil {
-		b.Skip("import the medium fixture or set GAT_BENCH_STORE")
+		b.Skip("import the medium fixture or set GYIT_BENCH_STORE")
 	}
 	for _, args := range [][]string{{"branch", "-a"}, {"branch", "-av"}, {"tag"}, {"show-ref"}, {"rev-parse", "--short", "HEAD"}} {
 		b.Run(strings.Join(args, "_"), func(b *testing.B) {

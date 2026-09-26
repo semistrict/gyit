@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	wire "gat/internal/archive/wire"
+	wire "gyit/internal/archive/wire"
 )
 
 func TestTreeRangeProviderAdmissionAndReadback(t *testing.T) {

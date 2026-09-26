@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/store"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
@@ -56,19 +56,19 @@ type catalogReport struct {
 }
 
 func TestCorrectnessFullCatalog(t *testing.T) {
-	if os.Getenv("GAT_RUN_FULL_CATALOG_CORRECTNESS") != "1" {
-		t.Skip("set GAT_RUN_FULL_CATALOG_CORRECTNESS=1 for complete persisted identity verification")
+	if os.Getenv("GYIT_RUN_FULL_CATALOG_CORRECTNESS") != "1" {
+		t.Skip("set GYIT_RUN_FULL_CATALOG_CORRECTNESS=1 for complete persisted identity verification")
 	}
-	location, output := os.Getenv("GAT_CORRECTNESS_STORE"), os.Getenv("GAT_CORRECTNESS_CATALOG_REPORT")
+	location, output := os.Getenv("GYIT_CORRECTNESS_STORE"), os.Getenv("GYIT_CORRECTNESS_CATALOG_REPORT")
 	if !filepath.IsAbs(location) || !filepath.IsAbs(output) {
-		t.Fatal("absolute GAT_CORRECTNESS_STORE and GAT_CORRECTNESS_CATALOG_REPORT are required")
+		t.Fatal("absolute GYIT_CORRECTNESS_STORE and GYIT_CORRECTNESS_CATALOG_REPORT are required")
 	}
 	if _, err := os.Stat(filepath.Join(location, "HEAD")); err != nil {
 		t.Fatal(err)
 	}
 	fixture := correctnessReadFixture(t)
 	facts := fixture.Facts
-	if override := os.Getenv("GAT_CORRECTNESS_FACTS"); override != "" && override != facts {
+	if override := os.Getenv("GYIT_CORRECTNESS_FACTS"); override != "" && override != facts {
 		t.Fatal("facts path differs from the independent fixture")
 	}
 	spec := catalogFactsSpec{SHA256: fixture.FactsSHA, Bytes: fixture.FactsBytes, Population: map[string]catalogPopulation{}}
@@ -140,7 +140,7 @@ func catalogVerify(ctx context.Context, backend store.Store, facts, tempBase str
 		}
 		report.MetadataGets, report.MetadataBytes = readonly.gets.Load(), readonly.bytes.Load()
 	}()
-	tmp, err := os.MkdirTemp(tempBase, "gat-catalog-verify-")
+	tmp, err := os.MkdirTemp(tempBase, "gyit-catalog-verify-")
 	if err != nil {
 		return report, err
 	}

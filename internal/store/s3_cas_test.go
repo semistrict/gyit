@@ -14,7 +14,7 @@ import (
 // Verify the SDK's wire contract without requiring credentials or an emulator.
 // Actual atomicity is supplied by the S3 service, never emulated by this client.
 func TestS3PublicationConditions(t *testing.T) {
-	t.Setenv("AWS_ACCESS_KEY_ID", "gat-test")
+	t.Setenv("AWS_ACCESS_KEY_ID", "gyit-test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "local-test-secret")
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	for _, tc := range []struct {

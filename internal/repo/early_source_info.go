@@ -8,9 +8,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	sizetable "gat/internal/globalsizes"
-	metaplan "gat/internal/packmeta"
-	"gat/internal/scratchmap"
+	sizetable "gyit/internal/globalsizes"
+	metaplan "gyit/internal/packmeta"
+	"gyit/internal/scratchmap"
 	"io"
 	"strconv"
 )

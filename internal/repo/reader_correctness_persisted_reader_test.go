@@ -19,20 +19,20 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/archive"
-	archivewire "gat/internal/archive/wire"
-	readerv1 "gat/internal/gen/verification/reader/v1"
-	"gat/internal/store"
+	"gyit/internal/archive"
+	archivewire "gyit/internal/archive/wire"
+	readerv1 "gyit/internal/gen/verification/reader/v1"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestCorrectnessPersistedReader(t *testing.T) {
-	if os.Getenv("GAT_RUN_READER_CORRECTNESS") != "1" {
-		t.Skip("set GAT_RUN_READER_CORRECTNESS=1 for persisted-store reader verification")
+	if os.Getenv("GYIT_RUN_READER_CORRECTNESS") != "1" {
+		t.Skip("set GYIT_RUN_READER_CORRECTNESS=1 for persisted-store reader verification")
 	}
-	source, backend := os.Getenv("GAT_CORRECTNESS_SOURCE"), os.Getenv("GAT_CORRECTNESS_STORE")
+	source, backend := os.Getenv("GYIT_CORRECTNESS_SOURCE"), os.Getenv("GYIT_CORRECTNESS_STORE")
 	if !filepath.IsAbs(source) || !filepath.IsAbs(backend) {
-		t.Fatal("absolute GAT_CORRECTNESS_SOURCE and GAT_CORRECTNESS_STORE are required")
+		t.Fatal("absolute GYIT_CORRECTNESS_SOURCE and GYIT_CORRECTNESS_STORE are required")
 	}
 	if _, err := os.Stat(filepath.Join(backend, "HEAD")); err != nil {
 		t.Fatal("persisted store must exist", err)
@@ -46,7 +46,7 @@ func TestCorrectnessPersistedReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(dir, "git-called")
-	if err := os.WriteFile(filepath.Join(trapDir, "git"), []byte("#!/bin/sh\nprintf 'unexpected Git invocation\\n' >> \"$GAT_CORRECTNESS_GIT_TRAP\"\nexit 97\n"), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(trapDir, "git"), []byte("#!/bin/sh\nprintf 'unexpected Git invocation\\n' >> \"$GYIT_CORRECTNESS_GIT_TRAP\"\nexit 97\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	executable, err := os.Executable()
@@ -57,11 +57,11 @@ func TestCorrectnessPersistedReader(t *testing.T) {
 	child.Dir = dir
 	for _, e := range os.Environ() {
 		name, _, _ := strings.Cut(e, "=")
-		if name != "PATH" && !strings.HasPrefix(name, "GAT_") && !strings.HasPrefix(name, "GIT_") {
+		if name != "PATH" && !strings.HasPrefix(name, "GYIT_") && !strings.HasPrefix(name, "GIT_") {
 			child.Env = append(child.Env, e)
 		}
 	}
-	child.Env = append(child.Env, "PATH="+trapDir, "GAT_CORRECTNESS_READER_CHILD=1", "GAT_CORRECTNESS_STORE="+backend, "GAT_CORRECTNESS_ORACLE="+dir, "GAT_CORRECTNESS_GIT_TRAP="+marker, "GAT_CORRECTNESS_READER_REPORT="+os.Getenv("GAT_CORRECTNESS_READER_REPORT"), "GAT_CORRECTNESS_REQUIRE_EDGES="+os.Getenv("GAT_CORRECTNESS_REQUIRE_EDGES"))
+	child.Env = append(child.Env, "PATH="+trapDir, "GYIT_CORRECTNESS_READER_CHILD=1", "GYIT_CORRECTNESS_STORE="+backend, "GYIT_CORRECTNESS_ORACLE="+dir, "GYIT_CORRECTNESS_GIT_TRAP="+marker, "GYIT_CORRECTNESS_READER_REPORT="+os.Getenv("GYIT_CORRECTNESS_READER_REPORT"), "GYIT_CORRECTNESS_REQUIRE_EDGES="+os.Getenv("GYIT_CORRECTNESS_REQUIRE_EDGES"))
 	child.Stdout, child.Stderr = os.Stdout, os.Stderr
 	err = child.Run()
 	if _, trapErr := os.Stat(marker); !os.IsNotExist(trapErr) {
@@ -290,12 +290,12 @@ func correctnessDirectory(ctx context.Context, s *Snapshot, d *readerv1.Director
 }
 
 func TestCorrectnessPersistedReaderSourceFree(t *testing.T) {
-	if os.Getenv("GAT_CORRECTNESS_READER_CHILD") != "1" {
+	if os.Getenv("GYIT_CORRECTNESS_READER_CHILD") != "1" {
 		t.Skip("isolated child of persisted reader verification")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 170*time.Second)
 	defer cancel()
-	dir := os.Getenv("GAT_CORRECTNESS_ORACLE")
+	dir := os.Getenv("GYIT_CORRECTNESS_ORACLE")
 	raw, err := os.ReadFile(filepath.Join(dir, "oracle.pb"))
 	if err != nil {
 		t.Fatal(err)
@@ -318,12 +318,12 @@ func TestCorrectnessPersistedReaderSourceFree(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	local, err := store.NewLocal(os.Getenv("GAT_CORRECTNESS_STORE"))
+	local, err := store.NewLocal(os.Getenv("GYIT_CORRECTNESS_STORE"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	meter := &correctnessReadStore{Store: local}
-	report := correctnessReadReport{Tip: o.Tip, SourceIndependent: os.Getenv("GAT_CORRECTNESS_SOURCE") == "", Coverage: map[string]int{}, CacheLimitBytes: DefaultCacheBytes, Limitations: []string{"Selected object/version coverage; not a byte-for-byte walk of every historical object.", "Repository API verification; mounted FUSE and CLI behavior are verified separately.", "32 MiB assertion covers retained payload capacity plus table metadata, not process RSS or bounded in-flight decode buffers.", "Source-free child receives no source path and traps Git; it is not an OS filesystem sandbox."}}
+	report := correctnessReadReport{Tip: o.Tip, SourceIndependent: os.Getenv("GYIT_CORRECTNESS_SOURCE") == "", Coverage: map[string]int{}, CacheLimitBytes: DefaultCacheBytes, Limitations: []string{"Selected object/version coverage; not a byte-for-byte walk of every historical object.", "Repository API verification; mounted FUSE and CLI behavior are verified separately.", "32 MiB assertion covers retained payload capacity plus table metadata, not process RSS or bounded in-flight decode buffers.", "Source-free child receives no source path and traps Git; it is not an OS filesystem sandbox."}}
 	for _, gap := range o.Gaps {
 		report.Limitations = append(report.Limitations, "Oracle gap: "+gap)
 	}
@@ -336,7 +336,7 @@ func TestCorrectnessPersistedReaderSourceFree(t *testing.T) {
 			report.Completed = false
 			t.Error("reader attempted writes")
 		}
-		if path := os.Getenv("GAT_CORRECTNESS_READER_REPORT"); path != "" {
+		if path := os.Getenv("GYIT_CORRECTNESS_READER_REPORT"); path != "" {
 			b, e := json.MarshalIndent(report, "", "  ")
 			if e == nil {
 				e = os.WriteFile(path, append(b, '\n'), 0600)
@@ -554,7 +554,7 @@ func TestCorrectnessPersistedReaderSourceFree(t *testing.T) {
 		}
 		return nil
 	})
-	if os.Getenv("GAT_CORRECTNESS_REQUIRE_EDGES") == "1" {
+	if os.Getenv("GYIT_CORRECTNESS_REQUIRE_EDGES") == "1" {
 		for _, kind := range []string{"empty_blob", "large_chunked_blob", "native_chain_blob", "archive_tree", "compiled_tree", "paged_directory"} {
 			if report.Coverage[kind] == 0 {
 				t.Errorf("required representation was not exercised: %s", kind)
@@ -564,7 +564,7 @@ func TestCorrectnessPersistedReaderSourceFree(t *testing.T) {
 			t.Errorf("required 16 related file revisions; exercised %d", report.Coverage["related_history"])
 		}
 	}
-	if _, err := os.Stat(os.Getenv("GAT_CORRECTNESS_GIT_TRAP")); !os.IsNotExist(err) {
+	if _, err := os.Stat(os.Getenv("GYIT_CORRECTNESS_GIT_TRAP")); !os.IsNotExist(err) {
 		t.Error("Git was called in source-free child")
 	}
 }

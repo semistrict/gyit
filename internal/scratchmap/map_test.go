@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"gat/internal/scratchmap"
+	"gyit/internal/scratchmap"
 )
 
 func TestGrowthUpdatesAndOwnedInputs(t *testing.T) {

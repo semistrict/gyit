@@ -12,15 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/control"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 // Uses the existing ignored clone and imported demo store; never clones/imports.
 func TestMediumLogMatchesGit(t *testing.T) {
-	if os.Getenv("GAT_MEDIUM_LOG_TEST") != "1" {
-		t.Skip("set GAT_MEDIUM_LOG_TEST=1 with the existing medium fixture and demo store")
+	if os.Getenv("GYIT_MEDIUM_LOG_TEST") != "1" {
+		t.Skip("set GYIT_MEDIUM_LOG_TEST=1 with the existing medium fixture and demo store")
 	}
 	source, err := filepath.Abs("../../.testdata/medium-repo.git")
 	if err != nil {
@@ -39,7 +39,7 @@ func TestMediumLogMatchesGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := control.New(repository, selected)
-	dir, err := os.MkdirTemp("", "gat-log-medium-")
+	dir, err := os.MkdirTemp("", "gyit-log-medium-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +75,8 @@ func TestMediumLogMatchesGit(t *testing.T) {
 }
 
 func TestMediumHistoryAgainstGit(t *testing.T) {
-	if os.Getenv("GAT_MEDIUM_HISTORY_TEST") != "1" {
-		t.Skip("set GAT_MEDIUM_HISTORY_TEST=1 with the existing medium fixture and demo store")
+	if os.Getenv("GYIT_MEDIUM_HISTORY_TEST") != "1" {
+		t.Skip("set GYIT_MEDIUM_HISTORY_TEST=1 with the existing medium fixture and demo store")
 	}
 	source, err := filepath.Abs("../../.testdata/medium-repo.git")
 	if err != nil {
@@ -95,7 +95,7 @@ func TestMediumHistoryAgainstGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := control.New(repository, selected)
-	dir, err := os.MkdirTemp("", "gat-log-medium-")
+	dir, err := os.MkdirTemp("", "gyit-log-medium-")
 	if err != nil {
 		t.Fatal(err)
 	}

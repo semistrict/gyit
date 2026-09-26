@@ -27,7 +27,7 @@ def main():
 
     source_sha = git(source, "rev-parse", "HEAD")
     objects = Path(git(source, "rev-parse", "--path-format=absolute", "--git-path", "objects"))
-    with tempfile.TemporaryDirectory(prefix="gat-clone-baseline-", dir=source.parent) as tmp:
+    with tempfile.TemporaryDirectory(prefix="gyit-clone-baseline-", dir=source.parent) as tmp:
         destination = Path(tmp) / "clone"
         with (output / "clone.out").open("wb") as stdout, (output / "clone.err").open("wb") as stderr:
             rc, elapsed, expired = run_capped(

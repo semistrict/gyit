@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"gat/internal/store"
+	"gyit/internal/store"
 	"strings"
 
-	"gat/internal/archive"
-	archivewire "gat/internal/archive/wire"
+	"gyit/internal/archive"
+	archivewire "gyit/internal/archive/wire"
 )
 
 func isArchiveTree(ref pageRef) bool { return strings.HasPrefix(ref.Pack, "index/tree-archive-") }

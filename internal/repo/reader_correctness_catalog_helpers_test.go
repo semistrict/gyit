@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/encoding/protowire"
 )
 

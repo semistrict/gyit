@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestImportCancellationWithUnreadSourceObjectsDoesNotPublish(t *testing.T) {

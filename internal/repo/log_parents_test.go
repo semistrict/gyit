@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestMergeHeaderDisambiguatesParents(t *testing.T) {

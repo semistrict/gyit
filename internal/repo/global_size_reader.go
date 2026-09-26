@@ -7,8 +7,8 @@ import (
 	"math"
 	"sync/atomic"
 
-	sizewire "gat/internal/globalsizes/wire"
-	"gat/internal/store"
+	sizewire "gyit/internal/globalsizes/wire"
+	"gyit/internal/store"
 )
 
 const globalTableBudget = 16 << 20

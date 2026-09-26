@@ -1,6 +1,6 @@
 # Repeatable Linux correctness checks
 
-These checks use the ordinary source tree and `go build ./cmd/gat`. They never
+These checks use the ordinary source tree and `go build ./cmd/gyit`. They never
 clone, fetch, repack, or change the existing Git source. An import requires a new
 empty object store; every other phase can reuse a retained store.
 
@@ -25,7 +25,7 @@ independent inventory hash. To adopt an already saved independent Git inventory,
 pass `--facts /absolute/path/objects.tsv --expected-facts-sha256 HASH`. `--source`,
 `--store`, `--output`, and `--fixture` accept paths outside this repository.
 
-`import` times the actual `gat import` executable, then launches an independent
+`import` times the actual `gyit import` executable, then launches an independent
 persisted-store verifier. To repeat only that verifier, run the `verify` phase.
 The `catalog` phase compares every non-tag object identity, type, and size and
 walks every main-index page. `reader` checks sampled exact bytes, directories,
@@ -47,12 +47,12 @@ python3 scripts/verify_linux_fuse_prepare.py \
   --source .testdata/linux-repo.git --out .build/linux-fuse-oracle
 ```
 
-Build `gat` normally on Linux, or cross-compile it using the project's supported
+Build `gyit` normally on Linux, or cross-compile it using the project's supported
 toolchain, then run this inside Linux with `/dev/fuse` and `fusermount3` available:
 
 ```sh
 python3 scripts/verify_linux_fuse.py \
-  --binary /absolute/path/gat --store /absolute/path/linux-store \
+  --binary /absolute/path/gyit --store /absolute/path/linux-store \
   --oracle /absolute/path/linux-fuse-oracle --report /tmp/linux-fuse-report.json
 ```
 

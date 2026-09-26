@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	probev1 "gat/internal/gen/gat/probe/v1"
-	"gat/internal/gitdelta"
+	probev1 "gyit/internal/gen/gyit/probe/v1"
+	"gyit/internal/gitdelta"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 )

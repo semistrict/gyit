@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"testing"
 
-	"gat/internal/gitdelta"
+	"gyit/internal/gitdelta"
 )
 
 type nativeSampleNode struct {
@@ -32,8 +32,8 @@ type nativeSampleCase struct {
 
 func loadNativeSamples(tb testing.TB) []nativeSampleCase {
 	tb.Helper()
-	if os.Getenv("GAT_NATIVE_DELTA_BENCH") != "1" {
-		tb.Skip("set GAT_NATIVE_DELTA_BENCH=1 with the bounded native-delta sample")
+	if os.Getenv("GYIT_NATIVE_DELTA_BENCH") != "1" {
+		tb.Skip("set GYIT_NATIVE_DELTA_BENCH=1 with the bounded native-delta sample")
 	}
 	dir := "../../.testdata/native-delta-sample"
 	read := func(name string) [][]string {

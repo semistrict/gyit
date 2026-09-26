@@ -7,7 +7,7 @@ import (
 	"math"
 	"strings"
 
-	sizewire "gat/internal/globalsizes/wire"
+	sizewire "gyit/internal/globalsizes/wire"
 )
 
 const globalReaderFormat = 9013

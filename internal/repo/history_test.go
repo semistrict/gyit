@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestHistoryLazyReadsAndLimits(t *testing.T) {

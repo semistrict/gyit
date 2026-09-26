@@ -8,7 +8,7 @@ import (
 	"io"
 	"path"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 const renameBuckets = 107927

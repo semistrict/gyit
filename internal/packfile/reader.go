@@ -9,11 +9,11 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	probev1 "gat/internal/gen/gat/probe/v1"
-	wirecodec "gat/internal/packcodec"
+	probev1 "gyit/internal/gen/gyit/probe/v1"
+	wirecodec "gyit/internal/packcodec"
 	"google.golang.org/protobuf/proto"
 
-	"gat/internal/gitdelta"
+	"gyit/internal/gitdelta"
 	"github.com/klauspost/compress/zstd"
 )
 

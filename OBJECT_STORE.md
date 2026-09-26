@@ -1,6 +1,6 @@
 # Object-store layout
 
-An ordinary `gat import` chooses archive format **8** for a qualified complete
+An ordinary `gyit import` chooses archive format **8** for a qualified complete
 single-pack SHA-1 repository. Other sources use reachable-object conversion and
 write format **6**. Readers also accept formats 4, 5, 7 and retained development
 publications, including 9015. There is no special build or importer environment

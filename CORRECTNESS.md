@@ -1,7 +1,7 @@
 # Ordinary-build integration verification — September 25, 2026
 
 The archive importer and readers are now part of the normal source tree.
-`go build ./cmd/gat` includes them without overlays or experimental environment
+`go build ./cmd/gyit` includes them without overlays or experimental environment
 switches. Qualified sources automatically use archive import and publish format
 8; unsupported source shapes use reachable-object conversion and report why.
 The ordinary binary also reads existing format-9015 publications.
@@ -9,7 +9,7 @@ The ordinary binary also reads existing format-9015 publications.
 A fresh full Linux import through the ordinary executable took **90.896101
 seconds** and produced **20,433,584,926 bytes** in 2,102 local-store files. It
 published stable format **8** with 11,839,497 non-tag objects. This is an actual
-`gat import` invocation using the default native-zlib cgo build and automatic
+`gyit import` invocation using the default native-zlib cgo build and automatic
 archive selection, without an overlay or importer experiment flags. It finished within the 180-second watchdog.
 
 The source revision is `f0100363d8c374bd8e9ea7c9ba02744f0b802ca4`. The retained
@@ -45,7 +45,7 @@ The format-9015 compatibility checks below are separate backward-compatibility
 evidence. After copying the FUSE reports, its mounts, process groups, sockets,
 temporary root, and owned VM report directory were removed. The existing demo
 mount remains present. No cloud resources were created. Final SHA-256 checks
-confirmed that all build-manifest inputs are unchanged, the top-level `./gat`
+confirmed that all build-manifest inputs are unchanged, the top-level `./gyit`
 matches the verified executable, and the Linux binary matches its FUSE report.
 
 ## Ordinary-build regressions
@@ -97,7 +97,7 @@ walk includes 14,806,430 rows in total.
 Machine-readable reports flag every measured operation over one second. These
 were all command cases exceeding one second in the fresh format-8 store run:
 
-| Revision / case | gat seconds | Git seconds |
+| Revision / case | gyit seconds | Git seconds |
 | --- | ---: | ---: |
 | HEAD / blame | 3.365 | 0.737 |
 | HEAD / annotate | 1.785 | 0.719 |
@@ -186,7 +186,7 @@ python3 scripts/verify_linux.py commands --store .testdata/linux-store
 ```
 
 `python3 scripts/verify_linux.py import --store NEW_EMPTY_DIRECTORY` times the
-actual built `gat import` command, kills its process group after 180 seconds,
+actual built `gyit import` command, kills its process group after 180 seconds,
 and follows successful publication with independent core verification. Every
 read phase also has a watchdog; timeout, incomplete reports, leftover process
 groups, or residual scratch are failures. Reports and failed stores are retained.

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // A reference listing performs thousands of small index probes. Retain only

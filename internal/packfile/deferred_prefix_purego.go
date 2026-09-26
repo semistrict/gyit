@@ -5,7 +5,7 @@ package packrecipe
 import (
 	"fmt"
 
-	wirecodec "gat/internal/packcodec"
+	wirecodec "gyit/internal/packcodec"
 )
 
 func inflateDeferredPrefix(dst, src []byte, decodedSize int) (int, error) {

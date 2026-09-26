@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func BenchmarkLogFileMedium(b *testing.B) {
@@ -19,12 +19,12 @@ func BenchmarkLogPathspecMedium(b *testing.B) {
 	benchmarkLogMedium(b, LogOptions{Count: 20, Paths: []string{":(glob)docs/**/*.md"}})
 }
 func benchmarkLogMedium(b *testing.B, options LogOptions) {
-	dir := os.Getenv("GAT_BENCH_STORE")
+	dir := os.Getenv("GYIT_BENCH_STORE")
 	if dir == "" {
 		dir = "../../.testdata/lima-store"
 	}
 	if _, err := os.Stat(filepath.Join(dir, "HEAD")); err != nil {
-		b.Skip("import the medium fixture or set GAT_BENCH_STORE")
+		b.Skip("import the medium fixture or set GYIT_BENCH_STORE")
 	}
 	for _, warm := range []bool{false, true} {
 		name := "fresh"

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 const SegmentSize int64 = 64 << 20

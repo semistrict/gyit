@@ -15,15 +15,15 @@ import (
 	"testing"
 	"time"
 
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
-	"gat/internal/store"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 
 func startServer(t *testing.T, handler Handler) (Client, *Server) {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "gat-control-")
+	dir, err := os.MkdirTemp("", "gyit-control-")
 	if err != nil {
 		t.Fatal(err)
 	}

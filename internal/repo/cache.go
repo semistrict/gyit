@@ -3,7 +3,7 @@ package repo
 import (
 	"container/list"
 	"context"
-	"gat/internal/store"
+	"gyit/internal/store"
 	"sync"
 
 	"golang.org/x/sync/singleflight"

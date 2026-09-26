@@ -78,7 +78,7 @@ func TestPagerLessEnvironment(t *testing.T) {
 	}
 }
 func TestRedirectedLogNeverStartsPager(t *testing.T) {
-	t.Setenv("GAT_PAGER", "exit 7")
+	t.Setenv("GYIT_PAGER", "exit 7")
 	var out, stderr bytes.Buffer
 	err := pageLog(context.Background(), &out, &stderr, func(ctx context.Context, w io.Writer) error { _, err := io.WriteString(w, "raw\n"); return err })
 	if err != nil || out.String() != "raw\n" {

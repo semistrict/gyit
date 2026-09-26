@@ -9,24 +9,24 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/control"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
-// GAT_MEDIUM_PARITY_TEST=1 go test ./internal/controlcli -run TestMediumCommandParity
+// GYIT_MEDIUM_PARITY_TEST=1 go test ./internal/controlcli -run TestMediumCommandParity
 // Uses the existing ignored source and imported store; never reclones or fetches.
 // Every comparison is byte-for-byte: no sorting, whitespace normalization,
 // omitted fields, or exemptions for ambiguous blank-line attribution.
 func TestMediumCommandParity(t *testing.T) {
-	if os.Getenv("GAT_MEDIUM_PARITY_TEST") != "1" {
-		t.Skip("set GAT_MEDIUM_PARITY_TEST=1 with the imported medium fixture")
+	if os.Getenv("GYIT_MEDIUM_PARITY_TEST") != "1" {
+		t.Skip("set GYIT_MEDIUM_PARITY_TEST=1 with the imported medium fixture")
 	}
 	source, err := filepath.Abs("../../.testdata/medium-repo.git")
 	if err != nil {
 		t.Fatal(err)
 	}
-	storeDir := os.Getenv("GAT_PARITY_STORE")
+	storeDir := os.Getenv("GYIT_PARITY_STORE")
 	if storeDir == "" {
 		storeDir = "../../.testdata/lima-store"
 	}
@@ -40,7 +40,7 @@ func TestMediumCommandParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := control.New(repository, selected)
-	dir, err := os.MkdirTemp("", "gat-parity-")
+	dir, err := os.MkdirTemp("", "gyit-parity-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,12 +51,12 @@ func TestMediumCommandParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer server.Close()
-	binary := filepath.Join(dir, "gat")
-	build := exec.Command("go", "build", "-o", binary, "../../cmd/gat")
+	binary := filepath.Join(dir, "gyit")
+	build := exec.Command("go", "build", "-o", binary, "../../cmd/gyit")
 	if b, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v %s", err, b)
 	}
-	env := append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "LC_ALL=C", "TZ=UTC", "TERM=dumb", "GAT_PAGER=cat", "GIT_PAGER=cat")
+	env := append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "LC_ALL=C", "TZ=UTC", "TERM=dumb", "GYIT_PAGER=cat", "GIT_PAGER=cat")
 	native := func(args ...string) []byte {
 		t.Helper()
 		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", source, "-c", "core.abbrev=7", "-c", "color.ui=false", "-c", "log.decorate=false"}, args...)...)
@@ -159,7 +159,7 @@ func TestMediumCommandParity(t *testing.T) {
 				if err := os.MkdirAll(artifacts, 0700); err != nil {
 					t.Fatal(err)
 				}
-				_ = os.WriteFile(filepath.Join(artifacts, "gat.txt"), got, 0600)
+				_ = os.WriteFile(filepath.Join(artifacts, "gyit.txt"), got, 0600)
 				_ = os.WriteFile(filepath.Join(artifacts, "git.txt"), want, 0600)
 				offset := 0
 				for offset < len(got) && offset < len(want) && got[offset] == want[offset] {
@@ -210,7 +210,7 @@ func TestMediumCommandParity(t *testing.T) {
 					t.Fatal(err)
 				}
 				if !bytes.Equal(got, want) {
-					os.WriteFile("../../.build/status-gat.txt", got, 0600)
+					os.WriteFile("../../.build/status-gyit.txt", got, 0600)
 					os.WriteFile("../../.build/status-git.txt", want, 0600)
 					t.Fatalf("status %v differs after switch %s", flags, revision)
 				}

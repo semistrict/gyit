@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 const requestTimeout = 30 * time.Second

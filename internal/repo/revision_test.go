@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestRevisionsMatchGitAndRefreshRefs(t *testing.T) {

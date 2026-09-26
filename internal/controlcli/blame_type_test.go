@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gat/internal/control"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 func TestBlameTypeChangesAgainstGit(t *testing.T) {
@@ -68,7 +68,7 @@ func TestBlameTypeChangesAgainstGit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			dir, err := os.MkdirTemp("", "gat-blame-type-")
+			dir, err := os.MkdirTemp("", "gyit-blame-type-")
 			if err != nil {
 				t.Fatal(err)
 			}

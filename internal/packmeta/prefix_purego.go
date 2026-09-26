@@ -5,7 +5,7 @@ package planner
 import (
 	"fmt"
 
-	wirecodec "gat/internal/packcodec"
+	wirecodec "gyit/internal/packcodec"
 )
 
 const PrefixInputLimit = 64 << 10

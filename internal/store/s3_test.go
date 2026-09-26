@@ -15,19 +15,19 @@ import (
 
 // This opt-in test creates and deletes a dedicated bucket on a local emulator.
 func TestS3RangeAndConditionalPublication(t *testing.T) {
-	endpoint := os.Getenv("GAT_S3_TEST_ENDPOINT")
+	endpoint := os.Getenv("GYIT_S3_TEST_ENDPOINT")
 	if endpoint == "" {
-		t.Skip("set GAT_S3_TEST_ENDPOINT to a local S3-compatible test server")
+		t.Skip("set GYIT_S3_TEST_ENDPOINT to a local S3-compatible test server")
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
 		t.Fatal("test endpoint must be loopback")
 	}
-	t.Setenv("AWS_ACCESS_KEY_ID", "gat-test")
+	t.Setenv("AWS_ACCESS_KEY_ID", "gyit-test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "local-test-secret")
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	ctx := context.Background()
-	bucket := fmt.Sprintf("gat-test-%d", time.Now().UnixNano())
+	bucket := fmt.Sprintf("gyit-test-%d", time.Now().UnixNano())
 	location, _ := url.Parse("s3://" + bucket + "/prefix")
 	s, err := newS3(ctx, location, endpoint, "us-east-1")
 	if err != nil {

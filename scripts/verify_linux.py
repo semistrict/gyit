@@ -21,11 +21,11 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / ".build/linux-correctness"
 PHASES = {
-    "import": ("repo.test", "TestCorrectnessImportLinux", "GAT_RUN_CORRECTNESS_IMPORT", 175, 180),
-    "verify": ("repo.test", "TestCorrectnessVerifyLinux", "GAT_RUN_CORRECTNESS_VERIFY", 190, 200),
-    "reader": ("repo.test", "TestCorrectnessPersistedReader", "GAT_RUN_READER_CORRECTNESS", 190, 200),
-    "catalog": ("repo.test", "TestCorrectnessFullCatalog", "GAT_RUN_FULL_CATALOG_CORRECTNESS", 190, 200),
-    "commands": ("commands.test", "TestCorrectnessLinuxCommandParity", "GAT_RUN_CORRECTNESS_COMMANDS", 250, 260),
+    "import": ("repo.test", "TestCorrectnessImportLinux", "GYIT_RUN_CORRECTNESS_IMPORT", 175, 180),
+    "verify": ("repo.test", "TestCorrectnessVerifyLinux", "GYIT_RUN_CORRECTNESS_VERIFY", 190, 200),
+    "reader": ("repo.test", "TestCorrectnessPersistedReader", "GYIT_RUN_READER_CORRECTNESS", 190, 200),
+    "catalog": ("repo.test", "TestCorrectnessFullCatalog", "GYIT_RUN_FULL_CATALOG_CORRECTNESS", 190, 200),
+    "commands": ("commands.test", "TestCorrectnessLinuxCommandParity", "GYIT_RUN_CORRECTNESS_COMMANDS", 250, 260),
 }
 
 
@@ -43,7 +43,7 @@ def digest(path):
 
 def clean_env():
     env = {key: value for key, value in os.environ.items()
-           if not key.startswith(("GAT_", "GIT_"))}
+           if not key.startswith(("GYIT_", "GIT_"))}
     env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null",
                GIT_OPTIONAL_LOCKS="0", GIT_NO_REPLACE_OBJECTS="1",
                GIT_NO_LAZY_FETCH="1", LC_ALL="C", TZ="UTC")
@@ -174,13 +174,13 @@ def build(output):
     for package, name in [("internal/repo", "repo.test"), ("internal/controlcli", "commands.test")]:
         subprocess.run(["go", "test", "-c", "-o", str(binary / name), "./" + package],
                        cwd=ROOT, check=True, timeout=180)
-    subprocess.run(["go", "build", "-o", str(binary / "gat"), "./cmd/gat"],
+    subprocess.run(["go", "build", "-o", str(binary / "gyit"), "./cmd/gyit"],
                    cwd=ROOT, check=True, timeout=180)
     inputs = {ROOT / "go.mod", ROOT / "go.sum", Path(__file__)}
     for directory in (ROOT / "internal", ROOT / "cmd", ROOT / "proto"):
         inputs.update(path for path in directory.rglob("*")
                       if path.is_file() and path.suffix in (".go", ".c", ".h", ".proto"))
-    binaries = [binary / name for name in ("repo.test", "commands.test", "gat")]
+    binaries = [binary / name for name in ("repo.test", "commands.test", "gyit")]
     save(output / "build.json", {"inputs": {str(p): digest(p) for p in sorted(inputs)},
                                   "binaries": {str(p): digest(p) for p in binaries},
                                   "go": subprocess.check_output(["go", "version"]).decode().strip()})
@@ -207,13 +207,13 @@ def run(args):
     work.mkdir()
     binary, test, optin, test_cap, group_cap = PHASES[args.phase]
     env = clean_env()
-    env.update({optin: "1", "GAT_CORRECTNESS_SOURCE": str(args.source),
-                "GAT_CORRECTNESS_FIXTURE": str(args.fixture),
-                "GAT_CORRECTNESS_STORE": str(args.store), "GAT_CORRECTNESS_WORK": str(work),
-                "GAT_CORRECTNESS_FACTS": fixture["facts"], "GAT_CORRECTNESS_REQUIRE_EDGES": "1"})
+    env.update({optin: "1", "GYIT_CORRECTNESS_SOURCE": str(args.source),
+                "GYIT_CORRECTNESS_FIXTURE": str(args.fixture),
+                "GYIT_CORRECTNESS_STORE": str(args.store), "GYIT_CORRECTNESS_WORK": str(work),
+                "GYIT_CORRECTNESS_FACTS": fixture["facts"], "GYIT_CORRECTNESS_REQUIRE_EDGES": "1"})
     for phase in PHASES:
         key = "COMMAND" if phase == "commands" else phase.upper()
-        env["GAT_CORRECTNESS_" + key + "_REPORT"] = str(output / (phase + ".json"))
+        env["GYIT_CORRECTNESS_" + key + "_REPORT"] = str(output / (phase + ".json"))
     argv = [str(args.output / "bin" / binary), "-test.run=^" + test + "$", "-test.v",
             "-test.count=1", "-test.timeout=" + str(test_cap) + "s"]
     source_before = None
@@ -223,7 +223,7 @@ def run(args):
         _, source_before = source_identity(args.source)
         if source_before != fixture["source_identity"]:
             raise ValueError("source objects changed since the independent inventory")
-        argv = [str(args.output / "bin/gat"), "import", "--repo", str(args.source),
+        argv = [str(args.output / "bin/gyit"), "import", "--repo", str(args.source),
                 "--store", str(args.store), "--temp-dir", str(work)]
     save(output / "command.json", {"argv": argv, "cwd": str(ROOT), "phase": args.phase,
                                   "store": str(args.store), "group_cap_seconds": group_cap})
@@ -241,8 +241,8 @@ def run(args):
         import_ok = import_ok and matched is not None and int(matched[2]) == expected
         verification = None
         if import_ok:
-            env["GAT_RUN_CORRECTNESS_VERIFY"] = "1"
-            env["GAT_CORRECTNESS_NEW_IMPORT"] = "1"
+            env["GYIT_RUN_CORRECTNESS_VERIFY"] = "1"
+            env["GYIT_CORRECTNESS_NEW_IMPORT"] = "1"
             with (output / "verify.stdout").open("wb") as stdout, (output / "verify.stderr").open("wb") as stderr:
                 verification = run_capped(
                     [str(args.output / "bin/repo.test"), "-test.run=^TestCorrectnessVerifyLinux$",

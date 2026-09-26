@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 const ChunkSize = 1 << 20
@@ -69,6 +69,7 @@ type Entry struct {
 
 type Repository struct {
 	readerOwner          *Repository
+	borrowedDisk         bool
 	globalMu             sync.Mutex
 	globalSizes          *globalSizeSlot
 	configuredCacheBytes int
@@ -367,8 +368,21 @@ func (r *Repository) Close() error {
 	if r.globalSizes != nil {
 		_ = r.globalSizes.clear(context.Background())
 	}
-	if r.cache.disk != nil {
+	if r.cache.disk != nil && !r.borrowedDisk {
 		return r.cache.disk.Close()
 	}
 	return nil
+}
+
+// NewSharedDisk borrows one decoded cache across immutable repositories.
+// Cache keys identify content, so equal objects can share decoded bytes.
+// The caller must close repositories before closing disk.
+func NewSharedDisk(s store.Store, disk *store.DiskCache) (*Repository, error) {
+	r, err := New(s, 0)
+	if err != nil {
+		return nil, err
+	}
+	r.cache.disk = disk
+	r.borrowedDisk = true
+	return r, nil
 }

@@ -419,7 +419,7 @@ const file_verification_reader_v1_oracle_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03oid\x18\x02 \x01(\tR\x03oid\x12\x12\n" +
 	"\x04mode\x18\x03 \x01(\rR\x04mode\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04sizeB2Z0gat/internal/gen/verification/reader/v1;readerv1b\x06proto3"
+	"\x04size\x18\x04 \x01(\x03R\x04sizeB3Z1gyit/internal/gen/verification/reader/v1;readerv1b\x06proto3"
 
 var (
 	file_verification_reader_v1_oracle_proto_rawDescOnce sync.Once

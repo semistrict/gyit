@@ -8,13 +8,13 @@ import (
 	"os"
 	"sync"
 
-	archivecopy "gat/internal/archive"
-	archiveplan "gat/internal/archive/planner"
-	archivewire "gat/internal/archive/wire"
-	"gat/internal/gitdelta"
-	orderedrows "gat/internal/orderedrows"
-	"gat/internal/packfile"
-	"gat/internal/store"
+	archivecopy "gyit/internal/archive"
+	archiveplan "gyit/internal/archive/planner"
+	archivewire "gyit/internal/archive/wire"
+	"gyit/internal/gitdelta"
+	orderedrows "gyit/internal/orderedrows"
+	"gyit/internal/packfile"
+	"gyit/internal/store"
 )
 
 // Shared immutable physical planning and one durable copy belong to an import,

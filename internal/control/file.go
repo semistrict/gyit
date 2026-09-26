@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const ControlFileName = ".gat.control"
+const ControlFileName = ".gyit.control"
 const controlFilePrefix = "fuse:"
 
 // FileServer serves one bounded protocol exchange per open FUSE handle. Pipes

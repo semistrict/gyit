@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/control"
-	"gat/internal/controlcli"
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	"gyit/internal/controlcli"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -149,8 +149,8 @@ func (s *racingPublisher) Put(ctx context.Context, key string, data []byte, toke
 }
 
 func TestMountedSwitchAndConcurrentPublisher(t *testing.T) {
-	if os.Getenv("GAT_FUSE_TEST") != "1" {
-		t.Skip("set GAT_FUSE_TEST=1 on Linux with /dev/fuse and fusermount3")
+	if os.Getenv("GYIT_FUSE_TEST") != "1" {
+		t.Skip("set GYIT_FUSE_TEST=1 on Linux with /dev/fuse and fusermount3")
 	}
 	dir := t.TempDir()
 	git := func(args ...string) string {

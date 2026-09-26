@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
 )
 
 func TestStatusAndArgumentErrors(t *testing.T) {
-	dir, err := os.MkdirTemp("", "gatcli-")
+	dir, err := os.MkdirTemp("", "gyitcli-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestStatusAndArgumentErrors(t *testing.T) {
 }
 
 func TestPositionalRevisionAndInterspersedFlags(t *testing.T) {
-	dir, err := os.MkdirTemp("", "gatcli-")
+	dir, err := os.MkdirTemp("", "gyitcli-")
 	if err != nil {
 		t.Fatal(err)
 	}

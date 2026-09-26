@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	"gat/internal/pathspec"
-	"gat/internal/store"
+	"gyit/internal/pathspec"
+	"gyit/internal/store"
 )
 
 const DefaultLogCount = 20

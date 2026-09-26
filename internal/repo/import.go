@@ -19,8 +19,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gat/internal/spill"
-	"gat/internal/store"
+	"gyit/internal/spill"
+	"gyit/internal/store"
 	"github.com/klauspost/compress/zstd"
 	bolt "go.etcd.io/bbolt"
 )
@@ -206,7 +206,7 @@ func importSelected(ctx context.Context, s store.Store, opt ImportOptions, metad
 			}
 		}
 	}
-	tmp, err := os.MkdirTemp(opt.TempDir, "gat-import-*")
+	tmp, err := os.MkdirTemp(opt.TempDir, "gyit-import-*")
 	if err != nil {
 		return stats, err
 	}

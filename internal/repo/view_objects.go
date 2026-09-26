@@ -16,8 +16,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gat/internal/pathspec"
-	"gat/internal/store"
+	"gyit/internal/pathspec"
+	"gyit/internal/store"
 )
 
 // ViewObjects implements queries against immutable committed objects.

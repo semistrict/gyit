@@ -10,7 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"gat/internal/store"
+	"gyit/internal/store"
 	"github.com/klauspost/compress/zstd"
 	"hash"
 	"io"

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 type viewRef struct {

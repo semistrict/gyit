@@ -6,8 +6,8 @@ import (
 	"io"
 	"iter"
 
-	"gat/internal/orderedrows"
-	"gat/internal/spill"
+	"gyit/internal/orderedrows"
+	"gyit/internal/spill"
 )
 
 // updateSortedOrdered merges already-ordered archive identities with the smaller

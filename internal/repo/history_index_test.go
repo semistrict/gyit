@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // This tests public history operations and their object-store I/O contract.

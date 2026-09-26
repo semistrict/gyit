@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // Older Git histories contain noncanonical permission bits. Filesystem views

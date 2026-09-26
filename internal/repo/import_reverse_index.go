@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"gat/internal/packmeta"
+	"gyit/internal/packmeta"
 	"golang.org/x/sys/unix"
 )
 

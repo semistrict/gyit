@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/control"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 const correctnessCommandLimit = 60 * time.Second
@@ -45,7 +45,7 @@ type correctnessCommandRow struct {
 	Args            []string                 `json:"args"`
 	GitArgs         []string                 `json:"git_args"`
 	ExpectedExit    int                      `json:"expected_exit"`
-	Gat             correctnessCommandResult `json:"gat"`
+	Gyit             correctnessCommandResult `json:"gyit"`
 	Git             correctnessCommandResult `json:"git"`
 	Equal           bool                     `json:"equal"`
 	FirstDifference int                      `json:"first_difference"`
@@ -89,14 +89,14 @@ type correctnessCommandCase struct {
 // It calls the normal CLI dispatcher through a real local protobuf server.
 // A mismatch is always a failure, including output order and whitespace.
 func TestCorrectnessLinuxCommandParity(t *testing.T) {
-	if os.Getenv("GAT_RUN_CORRECTNESS_COMMANDS") != "1" {
-		t.Skip("set GAT_RUN_CORRECTNESS_COMMANDS=1 after a complete store is published")
+	if os.Getenv("GYIT_RUN_CORRECTNESS_COMMANDS") != "1" {
+		t.Skip("set GYIT_RUN_CORRECTNESS_COMMANDS=1 after a complete store is published")
 	}
-	source := correctnessRequiredDirectory(t, "GAT_CORRECTNESS_SOURCE")
-	storeDir := correctnessRequiredDirectory(t, "GAT_CORRECTNESS_STORE")
-	reportPath := os.Getenv("GAT_CORRECTNESS_COMMAND_REPORT")
+	source := correctnessRequiredDirectory(t, "GYIT_CORRECTNESS_SOURCE")
+	storeDir := correctnessRequiredDirectory(t, "GYIT_CORRECTNESS_STORE")
+	reportPath := os.Getenv("GYIT_CORRECTNESS_COMMAND_REPORT")
 	if !filepath.IsAbs(reportPath) {
-		t.Fatal("GAT_CORRECTNESS_COMMAND_REPORT must be an absolute new file")
+		t.Fatal("GYIT_CORRECTNESS_COMMAND_REPORT must be an absolute new file")
 	}
 	if _, err := os.Lstat(reportPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("report already exists or cannot be inspected: %v", err)
@@ -212,7 +212,7 @@ func TestCorrectnessLinuxCommandParity(t *testing.T) {
 	if !filepath.IsAbs(objects) || strings.ContainsAny(objects, "\n\r") {
 		t.Fatal("invalid source object directory")
 	}
-	owned, err = os.MkdirTemp("", "gat-command-correctness-")
+	owned, err = os.MkdirTemp("", "gyit-command-correctness-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,25 +324,25 @@ func TestCorrectnessLinuxCommandParity(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					row := correctnessCommandRow{Snapshot: revision, SHA: sha, Name: tc.name, Args: tc.args, GitArgs: tc.args, ExpectedExit: tc.exit}
 					row.Git = runGit(oracle, nil, tc.args...)
-					row.Gat = correctnessRunGat(ctx, socket, tc.args)
-					row.FirstDifference = correctnessFirstDifference(row.Gat.stdout, row.Git.stdout)
-					row.Equal = row.Gat.Exit == tc.exit && row.Git.Exit == tc.exit && row.FirstDifference == -1 && !row.Gat.TimedOut && !row.Git.TimedOut && !row.Gat.OutputLimited && !row.Git.OutputLimited
+					row.Gyit = correctnessRunGyit(ctx, socket, tc.args)
+					row.FirstDifference = correctnessFirstDifference(row.Gyit.stdout, row.Git.stdout)
+					row.Equal = row.Gyit.Exit == tc.exit && row.Git.Exit == tc.exit && row.FirstDifference == -1 && !row.Gyit.TimedOut && !row.Git.TimedOut && !row.Gyit.OutputLimited && !row.Git.OutputLimited
 					row.Artifacts = filepath.Join(artifacts, revision, tc.name)
 					if err := os.MkdirAll(row.Artifacts, 0700); err != nil {
 						t.Fatal(err)
 					}
-					for name, data := range map[string][]byte{"gat.stdout": row.Gat.stdout, "git.stdout": row.Git.stdout, "gat.stderr": row.Gat.stderr, "git.stderr": row.Git.stderr} {
+					for name, data := range map[string][]byte{"gyit.stdout": row.Gyit.stdout, "git.stdout": row.Git.stdout, "gyit.stderr": row.Gyit.stderr, "git.stderr": row.Git.stderr} {
 						if err := os.WriteFile(filepath.Join(row.Artifacts, name), data, 0600); err != nil {
 							t.Fatal(err)
 						}
 					}
 					report.Cases = append(report.Cases, row)
 					writeReport(t)
-					if row.Gat.Over1s || row.Git.Over1s {
-						t.Logf("OVER 1s %s: gat %.6fs, Git %.6fs", tc.name, row.Gat.Seconds, row.Git.Seconds)
+					if row.Gyit.Over1s || row.Git.Over1s {
+						t.Logf("OVER 1s %s: gyit %.6fs, Git %.6fs", tc.name, row.Gyit.Seconds, row.Git.Seconds)
 					}
 					if !row.Equal {
-						t.Errorf("parity failure: gat exit=%d, Git exit=%d, expected=%d; first differing byte=%d; gat error=%q; Git error=%q; artifacts %s", row.Gat.Exit, row.Git.Exit, tc.exit, row.FirstDifference, row.Gat.Error, row.Git.Error, row.Artifacts)
+						t.Errorf("parity failure: gyit exit=%d, Git exit=%d, expected=%d; first differing byte=%d; gyit error=%q; Git error=%q; artifacts %s", row.Gyit.Exit, row.Git.Exit, tc.exit, row.FirstDifference, row.Gyit.Error, row.Git.Error, row.Artifacts)
 					}
 				})
 			}
@@ -415,7 +415,7 @@ func correctnessCommandCases(full bool) []correctnessCommandCase {
 		correctnessCommandCase{"cat-file-tree-raw", []string{"cat-file", "tree", "HEAD^{tree}"}, 0},
 		correctnessCommandCase{"cat-file-exists", []string{"cat-file", "-e", "HEAD:Makefile"}, 0},
 		correctnessCommandCase{"grep-blob", []string{"grep", "-n", "-F", "VERSION", "HEAD:Makefile"}, 0},
-		correctnessCommandCase{"grep-no-match", []string{"grep", "-q", "-F", "gat-correctness-impossible-token-812bd45e", "HEAD:Makefile"}, 1},
+		correctnessCommandCase{"grep-no-match", []string{"grep", "-q", "-F", "gyit-correctness-impossible-token-812bd45e", "HEAD:Makefile"}, 1},
 		correctnessCommandCase{"branch", []string{"branch", "-a"}, 0},
 		correctnessCommandCase{"branch-current-detached", []string{"branch", "--show-current"}, 0},
 		correctnessCommandCase{"tag-all", []string{"tag", "--list"}, 0},
@@ -454,12 +454,12 @@ func correctnessGitEnvironment() []string {
 	var env []string
 	for _, value := range os.Environ() {
 		key, _, _ := strings.Cut(value, "=")
-		if strings.HasPrefix(key, "GIT_") || key == "LC_ALL" || key == "TZ" || key == "TERM" || key == "GAT_PAGER" {
+		if strings.HasPrefix(key, "GIT_") || key == "LC_ALL" || key == "TZ" || key == "TERM" || key == "GYIT_PAGER" {
 			continue
 		}
 		env = append(env, value)
 	}
-	return append(env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C", "TZ=UTC", "TERM=dumb", "GAT_PAGER=cat")
+	return append(env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C", "TZ=UTC", "TERM=dumb", "GYIT_PAGER=cat")
 }
 
 type correctnessCappedBuffer struct {
@@ -519,7 +519,7 @@ func correctnessRunGitLimit(parent context.Context, binary string, env []string,
 	return r
 }
 
-func correctnessRunGat(parent context.Context, socket string, args []string) correctnessCommandResult {
+func correctnessRunGyit(parent context.Context, socket string, args []string) correctnessCommandResult {
 	ctx, cancel := context.WithTimeout(parent, correctnessCommandLimit)
 	defer cancel()
 	stdout := correctnessCappedBuffer{limit: correctnessOutputLimit}
@@ -531,7 +531,7 @@ func correctnessRunGat(parent context.Context, socket string, args []string) cor
 	if err != nil {
 		r.Exit, r.Error = 1, err.Error()
 		if !errors.Is(err, repo.ErrViewNoMatch) {
-			_, _ = fmt.Fprintf(&stderr, "gat: %v\n", err)
+			_, _ = fmt.Fprintf(&stderr, "gyit: %v\n", err)
 			r.stderr = stderr.Bytes()
 		}
 	}

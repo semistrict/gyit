@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package verification.reader.v1;
 
-option go_package = "gat/internal/gen/verification/reader/v1;readerv1";
+option go_package = "gyit/internal/gen/verification/reader/v1;readerv1";
 
 message Oracle {
   string tip = 1;

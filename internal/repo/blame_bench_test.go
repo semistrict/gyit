@@ -6,18 +6,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // Reuses the imported medium fixture. Compare the same snapshot with and without
 // the acceleration index; no imports, network calls or fixture mutations here.
 func BenchmarkBlameMedium(b *testing.B) {
-	dir := os.Getenv("GAT_BENCH_STORE")
+	dir := os.Getenv("GYIT_BENCH_STORE")
 	if dir == "" {
 		dir = "../../.testdata/lima-store"
 	}
 	if _, err := os.Stat(filepath.Join(dir, "HEAD")); err != nil {
-		b.Skip("import the medium fixture or set GAT_BENCH_STORE")
+		b.Skip("import the medium fixture or set GYIT_BENCH_STORE")
 	}
 	for _, indexed := range []bool{false, true} {
 		name := "legacy"

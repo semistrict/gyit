@@ -1,0 +1,189 @@
+package githubfs
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+func fixture(t *testing.T) (Options, string, string) {
+	t.Helper()
+	root := t.TempDir()
+	source := filepath.Join(root, "source")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) string {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", source}, args...)...)
+		c.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.test", "GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.test")
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q", "-b", "main")
+	os.Mkdir(filepath.Join(source, "dir"), 0700)
+	os.WriteFile(filepath.Join(source, "dir", "hello"), []byte("first revision\n"), 0600)
+	os.WriteFile(filepath.Join(source, "NOTICE"), []byte("real repository notice\n"), 0600)
+	git("add", ".")
+	git("commit", "-qm", "first")
+	first := git("rev-parse", "HEAD")
+	git("checkout", "-qb", "feature/login")
+	os.WriteFile(filepath.Join(source, "dir", "hello"), []byte("second revision\n"), 0600)
+	git("commit", "-qam", "second")
+	second := git("rev-parse", "HEAD")
+	git("checkout", "-q", "main")
+	remote := filepath.Join(root, "remotes", "acme")
+	os.MkdirAll(remote, 0700)
+	git("clone", "--bare", "--quiet", source, filepath.Join(remote, "project.git"))
+	return Options{DataDir: filepath.Join(root, "data"), CacheDir: filepath.Join(root, "cache"), CacheBytes: 16 << 20, RemoteBase: "file://" + filepath.Join(root, "remotes")}, first, second
+}
+func openFixture(t *testing.T) (*FS, Options, string, string) {
+	t.Helper()
+	opts, a, b := fixture(t)
+	f, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+	return f, opts, a, b
+}
+func waitReady(t *testing.T, f *FS, path string) {
+	t.Helper()
+	if _, err := f.ReadDir(t.Context(), path, "", 128); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if f.Generation(path) > 1 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	b := make([]byte, 4096)
+	n, _ := f.Read(t.Context(), path+"/NOTICE", b, 0)
+	t.Fatalf("setup did not finish: %s", b[:n])
+}
+func read(t *testing.T, f *FS, path string) string {
+	t.Helper()
+	b := make([]byte, 4096)
+	n, err := f.Read(t.Context(), path, b, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b[:n])
+}
+func TestNoticeThenAtomicSnapshot(t *testing.T) {
+	f, _, _, _ := openFixture(t)
+	// Occupy setup slots to deterministically inspect the queued state.
+	f.workers <- struct{}{}
+	f.workers <- struct{}{}
+	entries, err := f.ReadDir(t.Context(), "acme/project", "", 128)
+	if err != nil || len(entries) != 1 || entries[0].Name != "NOTICE" {
+		t.Fatalf("initial directory %v %v", entries, err)
+	}
+	if notice := read(t, f, "acme/project/NOTICE"); !strings.Contains(notice, "Queued") {
+		t.Fatalf("notice: %s", notice)
+	}
+	if _, err = f.Lookup(t.Context(), "acme/project/dir/hello"); err == nil {
+		t.Fatal("partial tree visible before setup")
+	}
+	<-f.workers
+	<-f.workers
+	waitReady(t, f, "acme/project")
+	if got := read(t, f, "acme/project/dir/hello"); got != "first revision\n" {
+		t.Fatalf("file %q", got)
+	}
+	if got := read(t, f, "acme/project/NOTICE"); got != "real repository notice\n" {
+		t.Fatalf("NOTICE was not replaced by real file: %q", got)
+	}
+	entries, err = f.ReadDir(t.Context(), "acme/project", "", 128)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("ready directory %v %v", entries, err)
+	}
+}
+func TestRevisionPathsAndReuse(t *testing.T) {
+	f, opts, first, second := openFixture(t)
+	paths := []string{"acme/project@" + first, "acme/project@feature%2Flogin", "acme/project@" + second}
+	var wg sync.WaitGroup
+	for _, p := range paths {
+		wg.Go(func() {
+			if _, err := f.Lookup(t.Context(), p); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	for i, p := range paths {
+		waitReady(t, f, p)
+		want := "second revision\n"
+		if i == 0 {
+			want = "first revision\n"
+		}
+		if got := read(t, f, p+"/dir/hello"); got != want {
+			t.Fatalf("%s: %q", p, got)
+		}
+	}
+	f.Close()
+	// Explicit commits remain usable from prepared data without their remote.
+	os.RemoveAll(strings.TrimPrefix(opts.RemoteBase, "file://"))
+	again, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	again.Lookup(t.Context(), paths[0])
+	waitReady(t, again, paths[0])
+	if read(t, again, paths[0]+"/dir/hello") != "first revision\n" {
+		t.Fatal("prepared snapshot changed")
+	}
+}
+func TestSetupFailureRemainsNotice(t *testing.T) {
+	f, _, _, _ := openFixture(t)
+	path := "acme/missing"
+	f.ReadDir(t.Context(), path, "", 128)
+	_, target, _ := parse(path)
+	f.mu.Lock()
+	j := f.jobs[target.Key()]
+	f.mu.Unlock()
+	select {
+	case <-j.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("failed setup did not finish")
+	}
+	entries, err := f.ReadDir(t.Context(), path, "", 128)
+	if err != nil || len(entries) != 1 || entries[0].Name != "NOTICE" {
+		t.Fatalf("failure directory %v %v", entries, err)
+	}
+	if got := read(t, f, path+"/NOTICE"); !strings.Contains(got, "Setup failed") {
+		t.Fatal(got)
+	}
+	if f.Generation(path) != 1 {
+		t.Fatal("failed setup published a snapshot")
+	}
+}
+func TestRevisionValidation(t *testing.T) {
+	for _, path := range []string{"../repo", "org/repo@", "org/repo@%zz", "org/repo@%00", "org/repo@-bad", "org/repo/../file"} {
+		if _, _, err := parse(path); err == nil {
+			t.Errorf("accepted %q", path)
+		}
+	}
+	_, target, err := parse("Org/Repo@feature%2FLogin/file")
+	if err != nil || target.Revision != "feature/Login" || target.Repository != "repo" {
+		t.Fatalf("parse: %+v %v", target, err)
+	}
+}
+func TestRootDoesNotStartSetup(t *testing.T) {
+	f, _, _, _ := openFixture(t)
+	entries, err := f.ReadDir(context.Background(), "", "", 128)
+	if err != nil || len(entries) != 0 || len(f.jobs) != 0 {
+		t.Fatalf("root %v %v", entries, err)
+	}
+}

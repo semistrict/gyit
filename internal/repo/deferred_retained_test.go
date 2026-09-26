@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // This helper reads only retained records from an unpublished, captured manifest.

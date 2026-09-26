@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func globalOpenIndex(t *testing.T, backend store.Store, prefix string, records map[string]any) pageRef {

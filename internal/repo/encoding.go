@@ -3,7 +3,7 @@ package repo
 import (
 	"fmt"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
 	"google.golang.org/protobuf/proto"
 )
 

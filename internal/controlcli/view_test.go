@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"gat/internal/repo"
+	"gyit/internal/repo"
 )
 
 func TestShowNativeParity(t *testing.T) {

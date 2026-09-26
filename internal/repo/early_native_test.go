@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/packfile"
-	"gat/internal/gitdelta"
-	"gat/internal/spill"
-	"gat/internal/store"
+	"gyit/internal/packfile"
+	"gyit/internal/gitdelta"
+	"gyit/internal/spill"
+	"gyit/internal/store"
 )
 
 type earlyNativeCase struct {

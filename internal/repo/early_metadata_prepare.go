@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gat/internal/store"
+	"gyit/internal/store"
 	"io"
 	"os"
 	"strconv"

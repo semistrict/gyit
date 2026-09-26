@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gat/internal/spill"
+	"gyit/internal/spill"
 )
 
 // Path names from rev-list are hints only, never authoritative tree metadata.

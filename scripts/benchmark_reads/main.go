@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 type measuredStore struct {

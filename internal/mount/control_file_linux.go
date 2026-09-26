@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"gat/internal/control"
-	"gat/internal/repo"
+	"gyit/internal/control"
+	"gyit/internal/repo"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )

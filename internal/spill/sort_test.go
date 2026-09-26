@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"gat/internal/spill"
+	"gyit/internal/spill"
 )
 
 func TestSortedWalkKeepsLatestValuesAcrossSpills(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func deferredCapture(t *testing.T) func() map[string]int64 {

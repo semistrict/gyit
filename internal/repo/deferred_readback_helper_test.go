@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"gat/internal/store"
+	"gyit/internal/store"
 	"io"
 	"sort"
 	"strconv"

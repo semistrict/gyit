@@ -15,7 +15,7 @@ import time
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DEFAULT_BINARY = ROOT / '.build/linux-correctness/bin/gat'
+DEFAULT_BINARY = ROOT / '.build/linux-correctness/bin/gyit'
 DEFAULT_STORE = ROOT / '.testdata/linux-store'
 
 
@@ -48,7 +48,7 @@ def main():
     require(os.uname().sysname == 'Linux', 'mounted verification requires Linux FUSE')
     args.oracle, args.report, args.binary, args.store = (path.resolve() for path in (args.oracle, args.report, args.binary, args.store))
     require((args.store / 'HEAD').is_file(), 'a retained published store is required')
-    require(args.binary.is_file() and os.access(args.binary, os.X_OK), 'an executable ordinary gat build is required')
+    require(args.binary.is_file() and os.access(args.binary, os.X_OK), 'an executable ordinary gyit build is required')
     require(not args.report.exists(), 'report must be a new file')
     require(not args.report.is_relative_to(args.store), 'report must stay outside the published store')
     require(args.report.is_absolute() and args.report.parent.is_dir(), 'report parent must already exist')
@@ -62,13 +62,13 @@ def main():
               'oracle_sha256': digest((args.oracle / 'oracle.json').read_bytes()),
               'head_sha256_before': head_before, 'operational_seconds': 180}
     require(shutil.which('fusermount3'), 'fusermount3 is required')
-    owned = Path(tempfile.mkdtemp(prefix='gat-correctness-fuse-', dir='/tmp'))
+    owned = Path(tempfile.mkdtemp(prefix='gyit-correctness-fuse-', dir='/tmp'))
     mounts = [owned / 'mount-one', owned / 'mount-two']
     sockets = [owned / 'one.sock', owned / 'two.sock']
     processes, logs, handles = [], [], []
     env = dict(os.environ, LC_ALL='C', TERM='dumb', GIT_PAGER='cat', PAGER='cat')
     for key in tuple(env):
-        if key.startswith('GAT_') or key.startswith('GIT_'):
+        if key.startswith('GYIT_') or key.startswith('GIT_'):
             env.pop(key, None)
     trap = owned / 'bin'
     trap.mkdir()
@@ -174,7 +174,7 @@ def main():
             while time.monotonic() < deadline:
                 for p in processes:
                     require(p.poll() is None, 'mount process exited before readiness')
-                if all(mounted(m) for m in mounts) and all((m / '.gat.control').is_file() for m in mounts):
+                if all(mounted(m) for m in mounts) and all((m / '.gyit.control').is_file() for m in mounts):
                     return
                 time.sleep(0.05)
             raise TimeoutError('two mounts did not become ready')

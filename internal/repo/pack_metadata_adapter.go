@@ -1,9 +1,9 @@
 package repo
 
 import (
-	metaplan "gat/internal/packmeta"
-	archiveplan "gat/internal/archive/planner"
-	archivewire "gat/internal/archive/wire"
+	metaplan "gyit/internal/packmeta"
+	archiveplan "gyit/internal/archive/planner"
+	archivewire "gyit/internal/archive/wire"
 )
 
 type sourceRecipePlanner interface {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func IsViewCommand(name string) bool {

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package gyit.probe.v1;
+
+option go_package = "gyit/internal/gen/gyit/probe/v1;probev1";
+
+// Compressed native instructions, ordered from base to target.
+message NativeProgramBundle {
+  repeated NativeFrame frames = 1;
+}
+
+message NativeFrame {
+  uint32 raw_size = 1;
+  bytes zlib = 2;
+}

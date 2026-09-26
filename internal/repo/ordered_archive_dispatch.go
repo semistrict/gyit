@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"sync"
 
-	archivewire "gat/internal/archive/wire"
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/gitdelta"
-	orderedrows "gat/internal/orderedrows"
-	"gat/internal/store"
+	archivewire "gyit/internal/archive/wire"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/gitdelta"
+	orderedrows "gyit/internal/orderedrows"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 

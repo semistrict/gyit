@@ -14,8 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func runHistory(ctx context.Context, args []string, out, stderr io.Writer) error {
@@ -89,7 +89,7 @@ func runHistory(ctx context.Context, args []string, out, stderr io.Writer) error
 			}
 		}
 		if len(revisions) > 2 {
-			return fmt.Errorf("usage: gat diff [FROM [TO]] [-- PATH...]")
+			return fmt.Errorf("usage: gyit diff [FROM [TO]] [-- PATH...]")
 		}
 	} else {
 		if !separated && len(revisions) > 0 {
@@ -97,7 +97,7 @@ func runHistory(ctx context.Context, args []string, out, stderr io.Writer) error
 			revisions = revisions[:len(revisions)-1]
 		}
 		if len(paths) != 1 || len(revisions) > 1 {
-			return fmt.Errorf("usage: gat %s [-L START,END] [REVISION] -- FILE", command)
+			return fmt.Errorf("usage: gyit %s [-L START,END] [REVISION] -- FILE", command)
 		}
 	}
 	resolvedSocket, converted, err := historyLocation(*socket, paths)
@@ -142,7 +142,7 @@ func runHistory(ctx context.Context, args []string, out, stderr io.Writer) error
 	}
 	// Git aligns author and line-number columns across the complete output. Spool
 	// protobuf records to a private bounded file instead of retaining all lines.
-	spool, err := os.CreateTemp("", "gat-blame-*")
+	spool, err := os.CreateTemp("", "gyit-blame-*")
 	if err != nil {
 		return err
 	}

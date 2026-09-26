@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // Graph queries keep ancestry membership in bitsets keyed by the immutable

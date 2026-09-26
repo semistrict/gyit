@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"strings"
 
-	"gat/internal/packmeta"
-	"gat/internal/store"
+	"gyit/internal/packmeta"
+	"gyit/internal/store"
 )
 
 // Import configuration belongs to one invocation. In particular, concurrent

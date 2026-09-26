@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/gitdelta"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/gitdelta"
 	"google.golang.org/protobuf/proto"
 )
 

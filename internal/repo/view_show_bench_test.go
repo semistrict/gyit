@@ -2,7 +2,7 @@ package repo
 
 import (
 	"context"
-	"gat/internal/store"
+	"gyit/internal/store"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,7 +11,7 @@ import (
 )
 
 func BenchmarkShowMedium(b *testing.B) {
-	dir := os.Getenv("GAT_BENCH_STORE")
+	dir := os.Getenv("GYIT_BENCH_STORE")
 	if dir == "" {
 		dir = "../../.testdata/lima-store"
 	}

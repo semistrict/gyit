@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func TestControlFileStreamsResponses(t *testing.T) {

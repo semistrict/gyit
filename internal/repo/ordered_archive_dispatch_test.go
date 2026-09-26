@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	metaplan "gat/internal/packmeta"
-	"gat/internal/store"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	metaplan "gyit/internal/packmeta"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 

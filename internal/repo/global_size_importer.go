@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"unsafe"
 
-	sizetable "gat/internal/globalsizes"
-	sizewire "gat/internal/globalsizes/wire"
-	"gat/internal/store"
+	sizetable "gyit/internal/globalsizes"
+	sizewire "gyit/internal/globalsizes/wire"
+	"gyit/internal/store"
 )
 
 const globalSizesFormat = formatVersion

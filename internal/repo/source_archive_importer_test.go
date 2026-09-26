@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func archiveImportInput(t *testing.T, source, input string, args ...string) string {

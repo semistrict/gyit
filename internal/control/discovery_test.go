@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -68,7 +68,7 @@ func TestDiscoveryStopsOnInvalidEndpoint(t *testing.T) {
 		{}, {0xff}, make([]byte, maxEndpoint+1),
 		encode(&pb.MountEndpoint{Version: 99, Socket: "/socket"}),
 		encode(&pb.MountEndpoint{Version: Version, Socket: "relative.sock"}),
-		encode(&pb.MountEndpoint{Version: Version, ControlFile: "/outside/.gat.control"}),
+		encode(&pb.MountEndpoint{Version: Version, ControlFile: "/outside/.gyit.control"}),
 		encode(&pb.MountEndpoint{Version: Version, ControlFile: "relative"}),
 		encode(&pb.MountEndpoint{Version: Version, Socket: "/socket", ControlFile: filepath.Join(cwd, ControlFileName)}),
 	} {
@@ -106,7 +106,7 @@ func TestDiscoveryFindsControlFileFromNestedDirectory(t *testing.T) {
 		}
 		return nil, nil
 	})
-	if err != nil || address != "fuse:"+filepath.Join(root, ".gat.control") || gotRoot != root {
+	if err != nil || address != "fuse:"+filepath.Join(root, ".gyit.control") || gotRoot != root {
 		t.Fatalf("discovery: %q %q %v", address, gotRoot, err)
 	}
 }

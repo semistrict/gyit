@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 	"google.golang.org/protobuf/proto"
 )
 
-const EndpointAttribute = "user.gat.control"
+const EndpointAttribute = "user.gyit.control"
 const maxEndpoint = 4096
 
 // Discover finds the nearest mount by walking physical ancestors. The endpoint

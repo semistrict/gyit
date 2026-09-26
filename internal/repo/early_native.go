@@ -11,9 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"gat/internal/gitdelta"
-	"gat/internal/packfile"
-	"gat/internal/store"
+	"gyit/internal/gitdelta"
+	"gyit/internal/packfile"
+	"gyit/internal/store"
 )
 
 type earlyNativeReader interface {

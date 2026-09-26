@@ -3,7 +3,7 @@
 
 Run --import-only on the host, then --skip-import inside a Linux FUSE VM.
 Outputs are retained alongside a TSV report for exact native-Git comparisons.
-Cold means a fresh gat server/cache, not a flushed OS or storage cache.
+Cold means a fresh gyit server/cache, not a flushed OS or storage cache.
 """
 
 import argparse
@@ -32,7 +32,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--store", type=Path, required=True)
-    p.add_argument("--gat", type=Path, required=True)
+    p.add_argument("--gyit", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--import-only", action="store_true")
@@ -46,13 +46,13 @@ def main():
     a = p.parse_args()
     if a.workers < 0:
         p.error("--workers cannot be negative")
-    a.source, a.store, a.gat, a.output = (
-        x.resolve() for x in (a.source, a.store, a.gat, a.output)
+    a.source, a.store, a.gyit, a.output = (
+        x.resolve() for x in (a.source, a.store, a.gyit, a.output)
     )
     a.output.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, LC_ALL="C", TZ="UTC", TERM="dumb",
                GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
-               GIT_PAGER="cat", GAT_PAGER="cat")
+               GIT_PAGER="cat", GYIT_PAGER="cat")
     git = ["git", "-C", str(a.source), "-c", "core.abbrev=7", "-c",
            "color.ui=false", "-c", "log.decorate=false"]
 
@@ -71,9 +71,9 @@ def main():
     (a.output / "environment.txt").write_text(
         f"platform={platform.platform()}\ncpu_count={os.cpu_count()}\n"
         f"source={a.source}\nsha={sha}\nold={old}\nstore={a.store}\n"
-        f"gat={a.gat}\ngat_sha256={digest(a.gat)}\ncache_mib=32\n"
+        f"gyit={a.gyit}\ngyit_sha256={digest(a.gyit)}\ncache_mib=32\n"
         f"git={native('--version')}\n"
-        f"cold=fresh gat process; OS cache not flushed\n"
+        f"cold=fresh gyit process; OS cache not flushed\n"
         f"import_limit_seconds={import_limit}\n"
         f"import_workers={a.workers}\n"
     )
@@ -106,7 +106,7 @@ def main():
     if not a.skip_import:
         if a.store.exists() and any(a.store.iterdir()):
             raise RuntimeError("fresh import requires an empty destination; use --skip-import for reads")
-        cmd = [str(a.gat), "import", "--repo", str(a.source), "--store", str(a.store)]
+        cmd = [str(a.gyit), "import", "--repo", str(a.source), "--store", str(a.store)]
         if a.workers:
             cmd += ["--workers", str(a.workers)]
         rc, _, _ = run("import", "fresh", cmd, timeout=import_limit)
@@ -158,14 +158,14 @@ def main():
     def mounted(label):
         nonlocal mount_number
         mount_number += 1
-        with tempfile.TemporaryDirectory(prefix="gat-linux-bench-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="gyit-linux-bench-") as tmp:
             root = Path(tmp)
             mount = root / "repo"
             mount.mkdir()
             sock = root / "control.sock"
             with (a.output / f"mount-{mount_number}.log").open("wb") as log:
                 started = time.monotonic()
-                server = subprocess.Popen([str(a.gat), "mount", "--store", str(a.store),
+                server = subprocess.Popen([str(a.gyit), "mount", "--store", str(a.store),
                     "--sha", sha, "--cache-mib", "32", "--socket", str(sock), str(mount)],
                     stdout=log, stderr=log, env=env, start_new_session=True)
                 try:
@@ -212,7 +212,7 @@ def main():
         with (mount / switch_path).open("rb") as handle:
             before = handle.read()
             for state, revision in (("old", old), ("back", sha)):
-                run("switch", state, [str(a.gat), "switch", revision], cwd=mount)
+                run("switch", state, [str(a.gyit), "switch", revision], cwd=mount)
                 if (mount / switch_path).stat().st_ino != inode:
                     issues.append(f"{switch_path} inode changed across switch")
                 actual = (mount / switch_path).read_bytes()
@@ -242,7 +242,7 @@ def main():
         with mounted(name) as mount:
             for state in ("cold", "warm"):
                 cmd = (["cat", str(mount / "init/main.c")] if name == "read-file" else
-                       [str(a.gat), args[0], "--timeout", "5m"] + args[1:])
+                       [str(a.gyit), args[0], "--timeout", "5m"] + args[1:])
                 actual = run(name, state, cmd, cwd=mount)
                 if actual[:2] != expected[:2]:
                     issues.append(f"{name} {state}: output or exit status differs from Git")

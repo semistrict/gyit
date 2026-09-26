@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	sizetable "gat/internal/globalsizes"
-	sizewire "gat/internal/globalsizes/wire"
-	"gat/internal/archive"
-	archivewire "gat/internal/archive/wire"
-	"gat/internal/store"
+	sizetable "gyit/internal/globalsizes"
+	sizewire "gyit/internal/globalsizes/wire"
+	"gyit/internal/archive"
+	archivewire "gyit/internal/archive/wire"
+	"gyit/internal/store"
 )
 
 type archiveReaderFixture struct {

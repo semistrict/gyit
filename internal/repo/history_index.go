@@ -13,9 +13,9 @@ import (
 	"runtime"
 	"strings"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/scratchmap"
-	"gat/internal/spill"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/scratchmap"
+	"gyit/internal/spill"
 	"google.golang.org/protobuf/proto"
 )
 

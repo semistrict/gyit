@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package gyit.sourcearchive.v1;
+
+option go_package = "gyit/internal/gen/gyit/sourcearchive/v1;archivev1";
+
+// Frames form one closed root-to-target chain. The first is a full object;
+// each remaining frame applies a native Git delta to the preceding object.
+message Recipe {
+  bytes archive_id = 1;
+  uint64 pack_size = 2;
+  bytes target_oid = 3;
+  repeated Frame frames = 4;
+}
+
+message Frame {
+  uint64 header_offset = 1;
+  uint64 offset = 2;
+  uint32 length = 3;
+  uint32 raw_size = 4;
+  uint32 size = 5;
+  bytes oid = 6;
+}

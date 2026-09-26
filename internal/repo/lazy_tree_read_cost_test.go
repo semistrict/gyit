@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 type lazyIO struct {
@@ -62,13 +62,13 @@ type lazyReadRow struct {
 }
 
 func TestLazyTreeReadCosts(t *testing.T) {
-	if os.Getenv("GAT_LAZY_TREE_READ_PROBE") != "1" {
+	if os.Getenv("GYIT_LAZY_TREE_READ_PROBE") != "1" {
 		t.Skip("opt-in source read diagnostic")
 	}
 	ctx := context.Background()
 	f := lazyBuildReadFixture(t, ctx)
 	var rows []lazyReadRow
-	report := os.Getenv("GAT_LAZY_TREE_READ_REPORT")
+	report := os.Getenv("GYIT_LAZY_TREE_READ_REPORT")
 	if report == "" {
 		t.Fatal("report path required")
 	}

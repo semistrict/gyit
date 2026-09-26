@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	wire "gat/internal/archive/wire"
+	wire "gyit/internal/archive/wire"
 )
 
 func openSourceFixture(t *testing.T, prefix string) *Planner {

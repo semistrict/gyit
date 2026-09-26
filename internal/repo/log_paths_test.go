@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestLogPathsMergeResolutionMatchesGit(t *testing.T) {

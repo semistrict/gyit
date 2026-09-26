@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 	bolt "go.etcd.io/bbolt"
 )
 

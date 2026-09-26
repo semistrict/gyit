@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func TestLogStreamingAndMissingTerminator(t *testing.T) {
 	for _, complete := range []bool{true, false} {
-		dir, err := os.MkdirTemp("", "gat-log-wire-")
+		dir, err := os.MkdirTemp("", "gyit-log-wire-")
 		if err != nil {
 			t.Fatal(err)
 		}

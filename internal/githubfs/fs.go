@@ -1,0 +1,430 @@
+// Package githubfs exposes GitHub repositories after background snapshot setup.
+package githubfs
+
+import (
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"golang.org/x/sync/singleflight"
+	"io"
+	"io/fs"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"syscall"
+
+	"golang.org/x/sys/unix"
+	"gyit/internal/repo"
+	"gyit/internal/store"
+)
+
+type Options struct {
+	// DataDir is durable repository storage, never subject to cache eviction.
+	DataDir string
+	// CacheDir contains disposable decoded data shared by every repository.
+	CacheDir string
+	// CacheBytes limits the combined cache size, not each repository or revision.
+	CacheBytes int64
+	Token      string
+	// RemoteBase defaults to GitHub; file URLs support repeatable local tests.
+	RemoteBase string
+	// APIBase overrides the GitHub API for local integration tests.
+	APIBase string
+}
+
+type Target struct{ Owner, Repository, Revision string }
+
+func (t Target) Key() string { return t.Owner + "/" + t.Repository + "@" + t.Revision }
+func validName(s string) bool {
+	if s == "" || s == "." || s == ".." || len(s) > 100 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+func parse(path string) ([]string, Target, error) {
+	var t Target
+	if path == "" {
+		return nil, t, nil
+	}
+	if !fs.ValidPath(path) || path == "." || strings.ContainsRune(path, 0) {
+		return nil, t, syscall.EINVAL
+	}
+	p := strings.Split(path, "/")
+	if !validName(p[0]) || strings.ContainsAny(p[0], "._") {
+		return nil, t, syscall.ENOENT
+	}
+	t.Owner = strings.ToLower(p[0])
+	if len(p) == 1 {
+		return p, t, nil
+	}
+	name, rev, has := strings.Cut(p[1], "@")
+	if !validName(name) {
+		return nil, t, syscall.ENOENT
+	}
+	t.Repository = strings.ToLower(name)
+	if has {
+		decoded, err := url.PathUnescape(rev)
+		if err != nil || decoded == "" || len(decoded) > 1024 || strings.ContainsAny(decoded, "\x00\r\n") || strings.HasPrefix(decoded, "-") {
+			return nil, t, syscall.EINVAL
+		}
+		t.Revision = decoded
+	}
+	return p, t, nil
+}
+
+type job struct {
+	mu         sync.RWMutex
+	target     Target
+	display    string
+	notice     string
+	snapshot   *repo.Snapshot
+	repository *repo.Repository
+	done       chan struct{}
+	generation uint64
+}
+
+func (j *job) status() (*repo.Snapshot, string, uint64) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return j.snapshot, j.notice, j.generation
+}
+func (j *job) progress(s string) {
+	j.mu.Lock()
+	j.notice = "gyit: preparing github.com/" + j.display + "\n\n" + s + "\n\nThe complete repository will replace this NOTICE when ready.\n"
+	j.mu.Unlock()
+}
+
+type FS struct {
+	opts          Options
+	ctx           context.Context
+	cancel        context.CancelFunc
+	mu            sync.Mutex
+	jobs          map[string]*job
+	owners        map[string]bool
+	closed        bool
+	workers       chan struct{}
+	wg            sync.WaitGroup
+	cache         *store.DiskCache
+	lock          *os.File
+	listings      map[string]listing
+	listingFlight singleflight.Group
+}
+
+func New(o Options) (*FS, error) {
+	if o.DataDir == "" || o.CacheDir == "" {
+		return nil, fmt.Errorf("repository data and cache directories are required")
+	}
+	if o.RemoteBase == "" {
+		o.RemoteBase = "https://github.com"
+	}
+	u, err := url.Parse(o.RemoteBase)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "https" && u.Scheme != "file") {
+		return nil, fmt.Errorf("invalid repository remote base")
+	}
+	if strings.ContainsAny(o.Token, "\r\n") {
+		return nil, fmt.Errorf("invalid GitHub token")
+	}
+	if err = os.MkdirAll(o.DataDir, 0700); err != nil {
+		return nil, err
+	}
+	lock, err := os.OpenFile(filepath.Join(o.DataDir, "lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		lock.Close()
+		return nil, fmt.Errorf("repository directory already in use: %w", err)
+	}
+	cache, err := store.NewDiskCache(nil, o.CacheDir, "github-snapshots-v1", o.CacheBytes)
+	if err != nil {
+		lock.Close()
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &FS{opts: o, ctx: ctx, cancel: cancel, jobs: make(map[string]*job), owners: make(map[string]bool), workers: make(chan struct{}, 2), cache: cache, lock: lock, listings: make(map[string]listing)}, nil
+}
+func (f *FS) Close() error {
+	f.mu.Lock()
+	if f.closed {
+		f.mu.Unlock()
+		return nil
+	}
+	f.closed = true
+	f.cancel()
+	f.mu.Unlock()
+	f.wg.Wait()
+	for _, j := range f.jobs {
+		if j.repository != nil {
+			j.repository.Close()
+		}
+	}
+	err := f.cache.Close()
+	f.lock.Close()
+	return err
+}
+func (f *FS) ensure(t Target, display string) (*job, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.closed {
+		return nil, os.ErrClosed
+	}
+	if j := f.jobs[t.Key()]; j != nil {
+		return j, nil
+	}
+	if len(f.jobs) >= 4096 {
+		return nil, syscall.ENOSPC
+	}
+	j := &job{target: t, display: display, done: make(chan struct{}), generation: 1}
+	j.progress("Queued for background setup.")
+	f.jobs[t.Key()] = j
+	f.owners[t.Owner] = true
+	f.start(j)
+	return j, nil
+}
+
+// start requires f.mu; retries reuse the job and never duplicate active setup.
+func (f *FS) start(j *job) {
+	t := j.target
+	done := j.done
+	f.wg.Add(1)
+	go func() {
+		defer f.wg.Done()
+		defer close(done)
+		select {
+		case f.workers <- struct{}{}:
+			defer func() { <-f.workers }()
+		case <-f.ctx.Done():
+			j.progress("Setup canceled.")
+			return
+		}
+		r, s, err := f.prepare(f.ctx, t, func(message string) { j.progress(f.redact(message)) })
+		if err != nil {
+			message := f.redact(err.Error())
+			j.progress("Setup failed: " + message + "\nTouch NOTICE to retry.")
+			return
+		}
+		j.mu.Lock()
+		j.repository = r
+		j.snapshot = s
+		j.generation++
+		j.mu.Unlock()
+	}()
+}
+
+// Retry accepts only the synthetic NOTICE, never a repository-owned file.
+func (f *FS) Retry(path string) error {
+	p, t, err := parse(path)
+	if err != nil {
+		return err
+	}
+	if len(p) != 3 || p[2] != "NOTICE" {
+		return syscall.EROFS
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.closed {
+		return os.ErrClosed
+	}
+	j := f.jobs[t.Key()]
+	if j == nil {
+		return syscall.ENOENT
+	}
+	s, _, _ := j.status()
+	if s != nil {
+		return syscall.EROFS
+	}
+	select {
+	case <-j.done:
+		j.done = make(chan struct{})
+		j.progress("Queued for background setup.")
+		f.start(j)
+	default:
+	}
+	return nil
+}
+
+func directory(name string) repo.Entry { return repo.Entry{Name: name, Mode: 0040000} }
+func (f *FS) Lookup(ctx context.Context, path string) (repo.Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return repo.Entry{}, err
+	}
+	p, t, err := parse(path)
+	if err != nil {
+		return repo.Entry{}, err
+	}
+	if len(p) == 0 {
+		return directory(""), nil
+	}
+	if len(p) == 1 {
+		f.mu.Lock()
+		if len(f.owners) >= 4096 && !f.owners[t.Owner] {
+			f.mu.Unlock()
+			return repo.Entry{}, syscall.ENOSPC
+		}
+		f.owners[t.Owner] = true
+		f.mu.Unlock()
+		return directory(p[0]), nil
+	}
+	// Finder and IDEs stat every child of an owner listing. Merely inspecting
+	// a repository directory must not import it; reading it or a child does.
+	if len(p) == 2 {
+		return directory(p[1]), nil
+	}
+	j, err := f.ensure(t, strings.Join(p[:2], "/"))
+	if err != nil {
+		return repo.Entry{}, err
+	}
+	s, notice, _ := j.status()
+	relative := strings.Join(p[2:], "/")
+	if s == nil {
+		if relative == "NOTICE" {
+			return repo.Entry{Name: "NOTICE", Mode: 0100444, Size: int64(len(notice))}, nil
+		}
+		return repo.Entry{}, syscall.ENOENT
+	}
+	return s.Resolve(ctx, relative)
+}
+func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo.Entry, error) {
+	if limit < 1 || limit > 128 {
+		return nil, syscall.EINVAL
+	}
+	p, t, err := parse(path)
+	if err != nil {
+		return nil, err
+	}
+	var entries []repo.Entry
+	if len(p) < 2 {
+		if len(p) == 1 {
+			names, err := f.listRepositories(ctx, t.Owner)
+			if err != nil {
+				return nil, err
+			}
+			for _, name := range names {
+				entries = append(entries, directory(name))
+			}
+		}
+		f.mu.Lock()
+		if len(p) == 0 {
+			for owner := range f.owners {
+				entries = append(entries, directory(owner))
+			}
+		} else {
+			for _, j := range f.jobs {
+				if j.target.Owner == t.Owner {
+					if f.opts.APIBase != "" || f.opts.RemoteBase == "https://github.com" {
+						snapshot, _, _ := j.status()
+						if snapshot == nil && j.target.Revision == "" {
+							continue
+						}
+					}
+					_, name, _ := strings.Cut(j.display, "/")
+					entries = append(entries, directory(name))
+				}
+			}
+		}
+		f.mu.Unlock()
+	} else {
+		j, err := f.ensure(t, strings.Join(p[:2], "/"))
+		if err != nil {
+			return nil, err
+		}
+		s, notice, _ := j.status()
+		if s == nil {
+			if len(p) > 2 {
+				return nil, syscall.ENOTDIR
+			}
+			entries = []repo.Entry{{Name: "NOTICE", Mode: 0100444, Size: int64(len(notice))}}
+		} else {
+			e, err := s.Resolve(ctx, strings.Join(p[2:], "/"))
+			if err != nil {
+				return nil, err
+			}
+			if e.Mode == 0160000 {
+				return nil, nil
+			}
+			if e.Mode != 0040000 {
+				return nil, syscall.ENOTDIR
+			}
+			return s.ReadDir(ctx, e.OID, after, limit)
+		}
+	}
+	// Deduplicate visited aliases against the remote listing.
+	seen := make(map[string]bool)
+	unique := entries[:0]
+	for _, e := range entries {
+		if !seen[e.Name] {
+			seen[e.Name] = true
+			unique = append(unique, e)
+		}
+	}
+	entries = unique
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	i := sort.Search(len(entries), func(i int) bool { return entries[i].Name > after })
+	return entries[i:min(i+limit, len(entries))], nil
+}
+func (f *FS) Read(ctx context.Context, path string, b []byte, off int64) (int, error) {
+	if off < 0 {
+		return 0, syscall.EINVAL
+	}
+	p, t, err := parse(path)
+	if err != nil {
+		return 0, err
+	}
+	if len(p) < 3 {
+		return 0, syscall.EISDIR
+	}
+	j, err := f.ensure(t, strings.Join(p[:2], "/"))
+	if err != nil {
+		return 0, err
+	}
+	s, notice, _ := j.status()
+	relative := strings.Join(p[2:], "/")
+	if s == nil {
+		if relative != "NOTICE" {
+			return 0, syscall.ENOENT
+		}
+		if off >= int64(len(notice)) {
+			return 0, nil
+		}
+		return copy(b, notice[off:]), nil
+	}
+	e, err := s.Resolve(ctx, relative)
+	if err != nil {
+		return 0, err
+	}
+	if e.Mode == 0040000 || e.Mode == 0160000 {
+		return 0, syscall.EISDIR
+	}
+	n, err := s.ReadAt(ctx, e.OID, b, off)
+	if err == io.EOF {
+		err = nil
+	}
+	return n, err
+}
+
+// Generation changes only when the complete snapshot becomes visible.
+func (f *FS) Generation(path string) uint64 {
+	p, t, err := parse(path)
+	if err != nil || len(p) < 2 {
+		return 1
+	}
+	f.mu.Lock()
+	j := f.jobs[t.Key()]
+	f.mu.Unlock()
+	if j == nil {
+		return 1
+	}
+	_, _, g := j.status()
+	return g
+}
+func storeID(t Target, sha string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(t.Owner+"/"+t.Repository+"/"+sha)))
+}

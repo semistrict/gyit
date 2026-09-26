@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	metaplan "gat/internal/packmeta"
+	metaplan "gyit/internal/packmeta"
 )
 
 // Retaining a native pack requires it to be the complete local object database.

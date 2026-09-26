@@ -1,0 +1,52 @@
+# Native macOS mount
+
+The Swift app and FSKit extension wrap the Go GitHub filesystem. The only mount
+resource is `https://github.com`, mounted as `/Volumes/gyit` with a `github.com` directory. The app owns
+mounting; no Terminal Full Disk Access or local repository picker is required.
+
+Build on Apple Silicon with Xcode selected:
+
+```sh
+python3 scripts/build_macos.py
+python3 scripts/test_macos.py
+```
+
+The default ad-hoc signature supports compilation and bridge tests. Installable
+builds require an Apple Developer account in Xcode:
+
+```sh
+python3 scripts/build_macos.py --team YOUR_TEAM_ID
+```
+
+Install `.build/macos/DerivedData/Build/Products/Debug/gyit.app` in Applications.
+Open System Settings → General → Login Items & Extensions → By Category →
+File System Extensions, and enable the extension. The signing identifiers remain
+stable across the project rename to preserve the existing app identity.
+
+The app requires macOS 27. Click **Mount gyit**, then enter a path such as
+`torvalds/linux` or `owner/repo@feature%2Flogin`. Opening it starts background
+setup. Read `NOTICE` for progress; the complete file tree replaces it when ready.
+Touch the synthetic `NOTICE` to retry a failed setup. Repository files remain
+read-only, including any real `NOTICE` after setup succeeds.
+Only public repositories are supported for now. The extension uses the actual
+Git binary from the installed Xcode or Command Line Tools, since `/usr/bin/git`
+is an xcrun launcher that cannot run inside App Sandbox.
+
+Prepared repository data lives in the extension sandbox's Application Support
+`gyit/repositories` directory. Its shared bounded mmap cache lives under Caches
+`gyit/decoded-v1`. The 4 GiB limit is shared across all repositories and revisions
+and applies only to the disposable cache. Repository storage is durable, has no
+configured size limit, and is never evicted. Both currently use local disk; the
+repository store can later be backed by S3 without changing this separation.
+
+The bridge test uses a small local Git remote and checks NOTICE replacement,
+file contents, directory permissions, parent IDs, symlinks, and write rejection.
+Check Finder metadata against an existing mounted repository with:
+
+```sh
+python3 scripts/test_macos.py --mount /Volumes/gyit \
+  --path github.com/owner/repo --path github.com/owner/repo/README.md
+```
+
+These development builds are not a notarized binary distribution. Profiles,
+credentials, caches, and build products remain outside tracked sources.

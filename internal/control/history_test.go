@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func TestHistoryStreamsRequireTerminator(t *testing.T) {
 	for _, kind := range []string{"diff", "blame"} {
 		for _, complete := range []bool{true, false} {
-			dir, err := os.MkdirTemp("", "gat-history-wire-")
+			dir, err := os.MkdirTemp("", "gyit-history-wire-")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -56,7 +56,7 @@ func TestHistoryStreamsRequireTerminator(t *testing.T) {
 	}
 }
 func TestHistoryCanceledClientStopsServerWork(t *testing.T) {
-	dir, err := os.MkdirTemp("", "gat-history-cancel-")
+	dir, err := os.MkdirTemp("", "gyit-history-cancel-")
 	if err != nil {
 		t.Fatal(err)
 	}

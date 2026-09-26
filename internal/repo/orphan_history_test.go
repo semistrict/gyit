@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // The orphan merge has one unindexed parent and one reachable/indexed parent.

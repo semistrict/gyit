@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	wirecodec "gat/internal/packcodec"
-	"gat/internal/store"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	wirecodec "gyit/internal/packcodec"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 

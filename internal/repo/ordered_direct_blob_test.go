@@ -9,10 +9,10 @@ import (
 	"math"
 	"testing"
 
-	"gat/internal/orderedrows"
-	archivewire "gat/internal/archive/wire"
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/store"
+	"gyit/internal/orderedrows"
+	archivewire "gyit/internal/archive/wire"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 

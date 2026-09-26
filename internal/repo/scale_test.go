@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -19,15 +19,15 @@ import (
 // TestExistingRepositoryS3 is a reproducible scale probe, not a default fixture.
 // It never fetches or changes the supplied source repository.
 func TestExistingRepositoryS3(t *testing.T) {
-	endpoint, source := os.Getenv("GAT_S3_TEST_ENDPOINT"), os.Getenv("GAT_SCALE_SOURCE")
+	endpoint, source := os.Getenv("GYIT_S3_TEST_ENDPOINT"), os.Getenv("GYIT_SCALE_SOURCE")
 	if endpoint == "" || source == "" {
-		t.Skip("set GAT_S3_TEST_ENDPOINT and GAT_SCALE_SOURCE for a local S3 scale probe")
+		t.Skip("set GYIT_S3_TEST_ENDPOINT and GYIT_SCALE_SOURCE for a local S3 scale probe")
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
 		t.Fatal("test endpoint must be loopback")
 	}
-	t.Setenv("AWS_ACCESS_KEY_ID", "gat-test")
+	t.Setenv("AWS_ACCESS_KEY_ID", "gyit-test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "local-test-secret")
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	ctx := context.Background()
@@ -36,7 +36,7 @@ func TestExistingRepositoryS3(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) { o.BaseEndpoint = aws.String(endpoint); o.UsePathStyle = true })
-	bucket := fmt.Sprintf("gat-scale-%d", time.Now().UnixNano())
+	bucket := fmt.Sprintf("gyit-scale-%d", time.Now().UnixNano())
 	if _, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)}); err != nil {
 		t.Fatal(err)
 	}

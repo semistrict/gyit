@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 var ErrViewNoMatch = errors.New("no matching result")

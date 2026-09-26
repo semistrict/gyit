@@ -13,7 +13,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"gat/internal/globalsizes/wire"
+	"gyit/internal/globalsizes/wire"
 )
 
 func oid(i uint64) (out [20]byte) {

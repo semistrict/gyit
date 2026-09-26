@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
 )
 
 func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error {
@@ -56,7 +56,7 @@ func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		return fmt.Errorf("log count must be between 0 and %d", repo.MaxLogCount)
 	}
 	if separated && f.NArg() > 1 {
-		return fmt.Errorf("usage: gat log [--oneline] [-n COUNT] [--first-parent] [REVISION] [-- PATH...]")
+		return fmt.Errorf("usage: gyit log [--oneline] [-n COUNT] [--first-parent] [REVISION] [-- PATH...]")
 	}
 	if *timeout <= 0 {
 		return fmt.Errorf("--timeout must be positive")

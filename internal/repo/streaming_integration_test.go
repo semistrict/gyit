@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestStreamingFallbackKeepsOriginalOrder(t *testing.T) {

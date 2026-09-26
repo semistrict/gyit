@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/store"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 	"github.com/klauspost/compress/zstd"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"

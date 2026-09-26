@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	wire "gat/internal/archive/wire"
-	"gat/internal/gitdelta"
+	wire "gyit/internal/archive/wire"
+	"gyit/internal/gitdelta"
 	"golang.org/x/sys/unix"
 )
 

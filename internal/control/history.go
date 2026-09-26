@@ -6,8 +6,8 @@ import (
 	"errors"
 	"strings"
 
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
 )
 
 type patchWriter struct{ send func(*pb.Response) error }

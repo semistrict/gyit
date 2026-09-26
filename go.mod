@@ -1,4 +1,4 @@
-module gat
+module gyit
 
 go 1.26.6
 

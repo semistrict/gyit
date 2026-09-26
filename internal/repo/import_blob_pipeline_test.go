@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // Enough small blobs to activate bulk import, interleaved with histories that

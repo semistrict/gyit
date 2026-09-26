@@ -17,8 +17,8 @@ import (
 // This opt-in metadata benchmark samples existing index OIDs. It never walks
 // complete history, clones a repository, or imports object contents.
 func BenchmarkPrepareObjectHintsLinuxSample(b *testing.B) {
-	if os.Getenv("GAT_LINUX_METADATA_BENCH") != "1" {
-		b.Skip("set GAT_LINUX_METADATA_BENCH=1 with the cached Linux source")
+	if os.Getenv("GYIT_LINUX_METADATA_BENCH") != "1" {
+		b.Skip("set GYIT_LINUX_METADATA_BENCH=1 with the cached Linux source")
 	}
 	source, err := filepath.Abs("../../.testdata/linux-repo.git")
 	if err != nil {

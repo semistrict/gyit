@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"gat/internal/scratchmap"
-	"gat/internal/spill"
+	"gyit/internal/scratchmap"
+	"gyit/internal/spill"
 )
 
 // Index records stream through a bounded sort. The mutex serializes writes

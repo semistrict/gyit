@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	metaplan "gat/internal/packmeta"
-	"gat/internal/store"
+	metaplan "gyit/internal/packmeta"
+	"gyit/internal/store"
 )
 
 type packMetadataFixture struct {

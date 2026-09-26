@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // A disconnected payload service still permits fresh publication metadata.

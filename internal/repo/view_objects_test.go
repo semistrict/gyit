@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestObjectViewsGitParity(t *testing.T) {
@@ -117,12 +117,12 @@ func checkObjectViewParity(t *testing.T, ctx context.Context, r *Repository, s *
 }
 
 func BenchmarkObjectViewsMedium(b *testing.B) {
-	dir := os.Getenv("GAT_BENCH_STORE")
+	dir := os.Getenv("GYIT_BENCH_STORE")
 	if dir == "" {
 		dir = "../../.testdata/lima-store"
 	}
 	if _, err := os.Stat(filepath.Join(dir, "HEAD")); err != nil {
-		b.Skip("import medium fixture or set GAT_BENCH_STORE")
+		b.Skip("import medium fixture or set GYIT_BENCH_STORE")
 	}
 	for _, args := range [][]string{{"ls-tree", "HEAD"}, {"ls-tree", "-r", "HEAD"}, {"ls-files"}, {"cat-file", "-p", "HEAD:README.md"}, {"grep", "-n", "the", "--", "README.md"}, {"grep", "-n", "the", "HEAD:README.md"}, {"grep", "-n", "the", "HEAD:docs"}, {"grep", "-n", "the", "HEAD~1:docs"}, {"grep", "-l", "the"}} {
 		b.Run(strings.Join(args, "_"), func(b *testing.B) {

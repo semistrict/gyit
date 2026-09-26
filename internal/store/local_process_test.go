@@ -16,8 +16,8 @@ import (
 // Each child runs an independent Local instance. The pipe releases all writers
 // after process creation, exercising file locks rather than a shared Go mutex.
 func TestLocalCASProcesses(t *testing.T) {
-	if os.Getenv("GAT_CAS_CHILD") == "1" {
-		s, err := NewLocal(os.Getenv("GAT_CAS_ROOT"))
+	if os.Getenv("GYIT_CAS_CHILD") == "1" {
+		s, err := NewLocal(os.Getenv("GYIT_CAS_ROOT"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -25,7 +25,7 @@ func TestLocalCASProcesses(t *testing.T) {
 		if _, err := io.ReadFull(os.Stdin, make([]byte, 1)); err != nil {
 			t.Fatal(err)
 		}
-		err = s.Put(context.Background(), "HEAD", bytes.Repeat([]byte(os.Getenv("GAT_CAS_VALUE")), 128<<10), os.Getenv("GAT_CAS_TOKEN"))
+		err = s.Put(context.Background(), "HEAD", bytes.Repeat([]byte(os.Getenv("GYIT_CAS_VALUE")), 128<<10), os.Getenv("GYIT_CAS_TOKEN"))
 		if errors.Is(err, ErrConflict) {
 			fmt.Println("conflict")
 			return
@@ -63,7 +63,7 @@ func TestLocalCASProcesses(t *testing.T) {
 			var children []child
 			for i := range 8 {
 				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLocalCASProcesses$")
-				cmd.Env = append(os.Environ(), "GAT_CAS_CHILD=1", "GAT_CAS_ROOT="+root, "GAT_CAS_TOKEN="+token, "GAT_CAS_VALUE="+strconv.Itoa(i))
+				cmd.Env = append(os.Environ(), "GYIT_CAS_CHILD=1", "GYIT_CAS_ROOT="+root, "GYIT_CAS_TOKEN="+token, "GYIT_CAS_VALUE="+strconv.Itoa(i))
 				input, err := cmd.StdinPipe()
 				if err != nil {
 					t.Fatal(err)

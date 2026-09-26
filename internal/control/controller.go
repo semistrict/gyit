@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/pathspec"
-	"gat/internal/repo"
-	"gat/internal/store"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/pathspec"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 // Controller owns the current snapshot. File handles retain their own snapshot.

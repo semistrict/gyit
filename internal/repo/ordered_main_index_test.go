@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"testing"
 
-	"gat/internal/orderedrows"
-	"gat/internal/spill"
-	"gat/internal/store"
+	"gyit/internal/orderedrows"
+	"gyit/internal/spill"
+	"gyit/internal/store"
 )
 
 func TestOrderedMainIndexMatchesExistingPages(t *testing.T) {

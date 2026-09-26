@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gat/internal/control"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 type statusStore struct {
@@ -68,7 +68,7 @@ func TestStatusMatchesNativeGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := control.New(repository, initial)
-	dir, err := os.MkdirTemp("", "gat-status-")
+	dir, err := os.MkdirTemp("", "gyit-status-")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/controlcli"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/controlcli"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 func TestMountedControlFileWithoutSocket(t *testing.T) {
-	if os.Getenv("GAT_FUSE_TEST") != "1" {
-		t.Skip("set GAT_FUSE_TEST=1 on Linux with FUSE")
+	if os.Getenv("GYIT_FUSE_TEST") != "1" {
+		t.Skip("set GYIT_FUSE_TEST=1 on Linux with FUSE")
 	}
 	source := t.TempDir()
 	git := func(args ...string) string {
@@ -47,7 +47,7 @@ func TestMountedControlFileWithoutSocket(t *testing.T) {
 		git("commit", "-qm", strings.Repeat("message ", 3000))
 		revisions = append(revisions, git("rev-parse", "HEAD"))
 	}
-	if err := os.WriteFile(filepath.Join(source, ".gat.control"), []byte("tracked file must never be hidden"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(source, ".gyit.control"), []byte("tracked file must never be hidden"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	git("add", ".")
@@ -105,7 +105,7 @@ func TestMountedControlFileWithoutSocket(t *testing.T) {
 	if got := cli("rev-parse", "HEAD"); got != revisions[2]+"\n" {
 		t.Fatal(got)
 	}
-	info, err := os.Stat(filepath.Join(mp, ".gat.control"))
+	info, err := os.Stat(filepath.Join(mp, ".gyit.control"))
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
 		t.Fatalf("virtual control file: %v %v", info, err)
 	}

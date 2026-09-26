@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // Exercise edited-rename discovery, not just --follow on an unchanged pathname.

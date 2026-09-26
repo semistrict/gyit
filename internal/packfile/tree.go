@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	probev1 "gat/internal/gen/gat/probe/v1"
-	"gat/internal/gitdelta"
+	probev1 "gyit/internal/gen/gyit/probe/v1"
+	"gyit/internal/gitdelta"
 	"google.golang.org/protobuf/proto"
 )
 

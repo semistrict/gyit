@@ -7,7 +7,7 @@ import (
 	"io"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 type recordingStore struct {

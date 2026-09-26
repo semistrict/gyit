@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	wire "gat/internal/archive/wire"
-	"gat/internal/store"
+	wire "gyit/internal/archive/wire"
+	"gyit/internal/store"
 )
 
 // Both delta choices are explicit in the synthetic native pack, independent of

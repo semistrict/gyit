@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"gat/internal/pathspec"
-	"gat/internal/store"
+	"gyit/internal/pathspec"
+	"gyit/internal/store"
 )
 
 var ErrCombinedPatchUnsupported = errors.New("combined merge patch rendering is not supported; use --first-parent")

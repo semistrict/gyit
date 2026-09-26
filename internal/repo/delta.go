@@ -6,11 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"gat/internal/store"
+	"gyit/internal/store"
 	"strings"
 	"sync"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"

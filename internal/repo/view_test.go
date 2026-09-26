@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // The backing publisher advances immediately after the first HEAD read.

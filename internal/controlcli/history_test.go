@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
-	"gat/internal/store"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
+	"gyit/internal/store"
 )
 
 func TestHistoryCommandsAgainstGit(t *testing.T) {
@@ -100,7 +100,7 @@ func TestHistoryCommandsAgainstGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := control.New(repository, selected)
-	dir, err := os.MkdirTemp("", "gat-history-")
+	dir, err := os.MkdirTemp("", "gyit-history-")
 	if err != nil {
 		t.Fatal(err)
 	}

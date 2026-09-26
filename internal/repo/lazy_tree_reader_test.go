@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/store"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/proto"
 )

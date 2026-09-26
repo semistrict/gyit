@@ -12,7 +12,7 @@ import (
 	"testing"
 	"unsafe"
 
-	pb "gat/internal/gen/gat/globalsizes/v1"
+	pb "gyit/internal/gen/gyit/globalsizes/v1"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )

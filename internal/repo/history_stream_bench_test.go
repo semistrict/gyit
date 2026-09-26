@@ -16,8 +16,8 @@ import (
 // This benchmark walks only a verified 16,384-commit region of the cached
 // source. It neither imports that repository nor fetches objects or refs.
 func BenchmarkHistoryStreamLinux(b *testing.B) {
-	if os.Getenv("GAT_LINUX_HISTORY_BENCH") != "1" {
-		b.Skip("set GAT_LINUX_HISTORY_BENCH=1 with the cached Linux source")
+	if os.Getenv("GYIT_LINUX_HISTORY_BENCH") != "1" {
+		b.Skip("set GYIT_LINUX_HISTORY_BENCH=1 with the cached Linux source")
 	}
 	source, e := filepath.Abs("../../.testdata/linux-repo.git")
 	if e != nil {

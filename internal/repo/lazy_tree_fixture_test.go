@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/packfile"
-	storagev1 "gat/internal/gen/gat/storage/v1"
-	"gat/internal/gitdelta"
-	"gat/internal/store"
+	"gyit/internal/packfile"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/gitdelta"
+	"gyit/internal/store"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/proto"
 )
@@ -229,14 +229,14 @@ func lazyFixtureMainRoot(t *testing.T, ctx context.Context, backend store.Store,
 
 func lazyBuildReadFixture(t *testing.T, parent context.Context) *lazyReadFixture {
 	t.Helper()
-	if os.Getenv("GAT_LAZY_TREE_READ_PROBE") != "1" {
+	if os.Getenv("GYIT_LAZY_TREE_READ_PROBE") != "1" {
 		t.Fatal("real-source fixture requires explicit read qualifier gate")
 	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
-	dir := os.Getenv("GAT_LAZY_TREE_FIXTURE_DATA")
+	dir := os.Getenv("GYIT_LAZY_TREE_FIXTURE_DATA")
 	if dir == "" {
-		t.Fatal("GAT_LAZY_TREE_FIXTURE_DATA is required")
+		t.Fatal("GYIT_LAZY_TREE_FIXTURE_DATA is required")
 	}
 	in := lazyFixtureInputs(t, dir)
 	source := filepath.Clean(filepath.Join(dir, "../../../../../.testdata/linux-repo.git"))
@@ -369,7 +369,7 @@ func TestLazyTreeFixtureMinimalCatalog(t *testing.T) {
 }
 
 func TestLazyTreeFixtureSourceSetup(t *testing.T) {
-	if os.Getenv("GAT_LAZY_TREE_READ_PROBE") != "1" {
+	if os.Getenv("GYIT_LAZY_TREE_READ_PROBE") != "1" {
 		t.Skip("opt-in fixed source fixture")
 	}
 	f := lazyBuildReadFixture(t, t.Context())

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // A large reachable graph exercises metadata preparation beyond a single

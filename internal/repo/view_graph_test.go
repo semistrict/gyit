@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func graphGit(t *testing.T, dir string, args ...string) ([]byte, int) {
@@ -133,8 +133,8 @@ func TestViewGraphCrissCross(t *testing.T) {
 	}
 }
 func TestViewGraphMediumParity(t *testing.T) {
-	if os.Getenv("GAT_MEDIUM_PARITY_TEST") == "" {
-		t.Skip("set GAT_MEDIUM_PARITY_TEST=1 to compare the existing medium fixture")
+	if os.Getenv("GYIT_MEDIUM_PARITY_TEST") == "" {
+		t.Skip("set GYIT_MEDIUM_PARITY_TEST=1 to compare the existing medium fixture")
 	}
 	source := "../../.testdata/medium-repo.git"
 	path := "../../.testdata/lima-store"
@@ -159,7 +159,7 @@ func TestViewGraphMediumParity(t *testing.T) {
 	}
 }
 func BenchmarkViewGraphMedium(b *testing.B) {
-	path := os.Getenv("GAT_BENCH_STORE")
+	path := os.Getenv("GYIT_BENCH_STORE")
 	if path == "" {
 		path = "../../.testdata/lima-store"
 	}

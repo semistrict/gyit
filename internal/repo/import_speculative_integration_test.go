@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // A real Git source with enough blobs for direct import and a long, skewed

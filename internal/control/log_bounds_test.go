@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	pb "gat/internal/gen/gat/control/v1"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func TestWideLogResponseFitsFrame(t *testing.T) {

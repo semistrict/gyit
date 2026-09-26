@@ -22,17 +22,17 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 	"golang.org/x/sys/unix"
 )
 
 // TestMediumRepository reuses an ignored, complete bare clone. Each invocation
 // creates a new object store so a previous import cannot hide importer failures.
-// First run: GAT_MEDIUM_TEST=1 GAT_CLONE_REPO=owner/repository go test ...
-// Later runs need only GAT_MEDIUM_TEST=1; the cached source is never fetched.
+// First run: GYIT_MEDIUM_TEST=1 GYIT_CLONE_REPO=owner/repository go test ...
+// Later runs need only GYIT_MEDIUM_TEST=1; the cached source is never fetched.
 func TestMediumRepository(t *testing.T) {
-	if os.Getenv("GAT_MEDIUM_TEST") != "1" {
-		t.Skip("set GAT_MEDIUM_TEST=1; first run also requires GAT_CLONE_REPO=owner/repository")
+	if os.Getenv("GYIT_MEDIUM_TEST") != "1" {
+		t.Skip("set GYIT_MEDIUM_TEST=1; first run also requires GYIT_CLONE_REPO=owner/repository")
 	}
 	ctx := t.Context()
 	if deadline, ok := t.Deadline(); ok {
@@ -52,31 +52,31 @@ func TestMediumRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	maxDuration := 5 * time.Minute
-	if text := os.Getenv("GAT_IMPORT_MAX_DURATION"); text != "" {
+	if text := os.Getenv("GYIT_IMPORT_MAX_DURATION"); text != "" {
 		maxDuration, err = time.ParseDuration(text)
 		if err != nil || maxDuration <= 0 {
-			t.Fatal("GAT_IMPORT_MAX_DURATION must be a positive duration")
+			t.Fatal("GYIT_IMPORT_MAX_DURATION must be a positive duration")
 		}
 	}
 	workers := min(4, runtime.GOMAXPROCS(0))
-	if text := os.Getenv("GAT_IMPORT_WORKERS"); text != "" {
+	if text := os.Getenv("GYIT_IMPORT_WORKERS"); text != "" {
 		if text == "numcpu" {
 			workers = runtime.NumCPU()
 		} else {
 			workers, err = strconv.Atoi(text)
 			if err != nil || workers < 1 {
-				t.Fatal("GAT_IMPORT_WORKERS must be positive or numcpu")
+				t.Fatal("GYIT_IMPORT_WORKERS must be positive or numcpu")
 			}
 		}
 	}
 	depth, candidates := 1, 4
-	if value := os.Getenv("GAT_DELTA_DEPTH"); value != "" {
+	if value := os.Getenv("GYIT_DELTA_DEPTH"); value != "" {
 		depth, err = strconv.Atoi(value)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	if value := os.Getenv("GAT_DELTA_CANDIDATES"); value != "" {
+	if value := os.Getenv("GYIT_DELTA_CANDIDATES"); value != "" {
 		candidates, err = strconv.Atoi(value)
 		if err != nil {
 			t.Fatal(err)
@@ -85,7 +85,7 @@ func TestMediumRepository(t *testing.T) {
 	t.Logf("compression: %s; workers=%d depth=%d candidates=%d", compressorName, workers, depth, candidates)
 	started, lastProgress := time.Now(), time.Now()
 	lastPhase := ""
-	stats, err := Import(ctx, backend, ImportOptions{Repo: source, DisableDeltas: os.Getenv("GAT_NO_DELTAS") == "1", CompressionWorkers: workers, DeltaDepth: depth, DeltaCandidates: candidates, Progress: func(s Stats) {
+	stats, err := Import(ctx, backend, ImportOptions{Repo: source, DisableDeltas: os.Getenv("GYIT_NO_DELTAS") == "1", CompressionWorkers: workers, DeltaDepth: depth, DeltaCandidates: candidates, Progress: func(s Stats) {
 		if s.Phase != lastPhase || time.Since(lastProgress) >= 15*time.Second {
 			t.Logf("import progress: elapsed=%s phase=%s objects=%d raw_MiB=%d uploaded_MiB=%d", time.Since(started).Round(time.Millisecond), s.Phase, s.Objects, s.Bytes>>20, s.UploadedBytes>>20)
 			lastPhase = s.Phase
@@ -243,9 +243,9 @@ func mediumSource(t *testing.T, ctx context.Context) string {
 	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 	source := filepath.Join(cache, "medium-repo.git")
 	if _, err := os.Stat(source); os.IsNotExist(err) {
-		target := os.Getenv("GAT_CLONE_REPO")
+		target := os.Getenv("GYIT_CLONE_REPO")
 		if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$`).MatchString(target) {
-			t.Fatal("first run requires GAT_CLONE_REPO=owner/repository")
+			t.Fatal("first run requires GYIT_CLONE_REPO=owner/repository")
 		}
 		// Rename only after a successful clone. A failed download cannot become
 		// a cached fixture, and concurrent test runs cannot race its creation.
@@ -269,7 +269,7 @@ func mediumSource(t *testing.T, ctx context.Context) string {
 		t.Fatal("cached fixture must be a complete bare repository")
 	}
 	// Changing the requested repository must not silently test the old fixture.
-	if requested := os.Getenv("GAT_CLONE_REPO"); requested != "" {
+	if requested := os.Getenv("GYIT_CLONE_REPO"); requested != "" {
 		remote := mediumGit(t, ctx, source, "remote", "get-url", "origin")
 		remote = strings.TrimSuffix(remote, ".git")
 		if !strings.HasSuffix(strings.ToLower(remote), "github.com/"+strings.ToLower(requested)) && !strings.HasSuffix(strings.ToLower(remote), "github.com:"+strings.ToLower(requested)) {
@@ -362,15 +362,15 @@ func mediumCheckBlob(t *testing.T, ctx context.Context, snapshot *Snapshot, entr
 // TestDeltaMatrix compares fresh destinations against the same cached history.
 // Runs sequentially to keep import timings free of competing benchmark work.
 func TestDeltaMatrix(t *testing.T) {
-	if os.Getenv("GAT_DELTA_MATRIX") != "1" {
-		t.Skip("set GAT_DELTA_MATRIX=1 to measure base selection and depths")
+	if os.Getenv("GYIT_DELTA_MATRIX") != "1" {
+		t.Skip("set GYIT_DELTA_MATRIX=1 to measure base selection and depths")
 	}
-	t.Setenv("GAT_MEDIUM_TEST", "1")
-	t.Setenv("GAT_NO_DELTAS", "0")
+	t.Setenv("GYIT_MEDIUM_TEST", "1")
+	t.Setenv("GYIT_NO_DELTAS", "0")
 	for _, opt := range []struct{ depth, candidates int }{{1, 1}, {1, 4}, {2, 4}, {4, 4}, {8, 4}} {
 		t.Run(fmt.Sprintf("depth_%d_candidates_%d", opt.depth, opt.candidates), func(t *testing.T) {
-			t.Setenv("GAT_DELTA_DEPTH", strconv.Itoa(opt.depth))
-			t.Setenv("GAT_DELTA_CANDIDATES", strconv.Itoa(opt.candidates))
+			t.Setenv("GYIT_DELTA_DEPTH", strconv.Itoa(opt.depth))
+			t.Setenv("GYIT_DELTA_CANDIDATES", strconv.Itoa(opt.candidates))
 			TestMediumRepository(t)
 		})
 	}

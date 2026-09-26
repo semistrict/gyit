@@ -7,7 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	wirecodec "gat/internal/packcodec"
+	wirecodec "gyit/internal/packcodec"
 )
 
 // Fetch must honor cancellation and return exactly length bounded bytes.

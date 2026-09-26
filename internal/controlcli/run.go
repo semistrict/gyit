@@ -1,4 +1,4 @@
-// Package controlcli implements gat's mount administration commands.
+// Package controlcli implements gyit's mount administration commands.
 package controlcli
 
 import (
@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
@@ -35,7 +35,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		})
 	}
 	if len(args) == 0 || (args[0] != "status" && args[0] != "switch") {
-		return fmt.Errorf("usage: gat <status|switch|checkout|log|diff|blame|annotate> [--socket PATH] [REVISION]")
+		return fmt.Errorf("usage: gyit <status|switch|checkout|log|diff|blame|annotate> [--socket PATH] [REVISION]")
 	}
 	f := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	f.SetOutput(stderr)
@@ -87,7 +87,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		if f.NArg() == 1 && sha == "" {
 			sha = f.Arg(0)
 		} else if f.NArg() != 0 || sha == "" {
-			return fmt.Errorf("usage: gat switch [options] REVISION")
+			return fmt.Errorf("usage: gyit switch [options] REVISION")
 		}
 	}
 	if *socket == "" {

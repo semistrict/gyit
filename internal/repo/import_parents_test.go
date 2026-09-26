@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 // A shallow boundary keeps the raw parent header in the commit object, while

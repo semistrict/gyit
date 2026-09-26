@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"unsafe"
 
-	wire "gat/internal/archive/wire"
+	wire "gyit/internal/archive/wire"
 	"golang.org/x/sys/unix"
 )
 

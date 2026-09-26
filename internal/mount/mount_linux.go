@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"gat/internal/control"
-	pb "gat/internal/gen/gat/control/v1"
-	"gat/internal/repo"
+	"gyit/internal/control"
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/protobuf/proto"
@@ -268,7 +268,7 @@ func Run(ctx context.Context, r *repo.Repository, sha, mountpoint, socket string
 	server, err := fs.Mount(mountpoint, &node{state: st, controlEndpoint: endpoint, controlFiles: files}, &fs.Options{
 		// Like JuiceFS, read-only data is enforced by the filesystem handlers.
 		// A kernel-wide ro flag would also prohibit writing control requests.
-		MountOptions: fuse.MountOptions{Options: []string{"default_permissions"}, Name: "gat", FsName: "gat", MaxBackground: 16},
+		MountOptions: fuse.MountOptions{Options: []string{"default_permissions"}, Name: "gyit", FsName: "gyit", MaxBackground: 16},
 		EntryTimeout: &zero, AttrTimeout: &zero, NegativeTimeout: &zero,
 		RootStableAttr: &fs.StableAttr{Ino: 1},
 	})

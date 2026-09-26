@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 var ErrInvalidRevision = errors.New("invalid revision")

@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 type correctnessPopulation struct{ Objects, RawBytes int64 }
@@ -39,9 +39,9 @@ type correctnessFixture struct {
 
 func correctnessReadFixture(t *testing.T) correctnessFixture {
 	t.Helper()
-	path := os.Getenv("GAT_CORRECTNESS_FIXTURE")
+	path := os.Getenv("GYIT_CORRECTNESS_FIXTURE")
 	if !filepath.IsAbs(path) {
-		t.Fatal("absolute GAT_CORRECTNESS_FIXTURE is required; run scripts/verify_linux.py prepare")
+		t.Fatal("absolute GYIT_CORRECTNESS_FIXTURE is required; run scripts/verify_linux.py prepare")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -306,9 +306,9 @@ func correctnessPhysicalStore(ctx context.Context, path string) (int64, int64, e
 func correctnessLinuxConfig(t *testing.T, verify bool) correctnessConfig {
 	t.Helper()
 	fixture := correctnessReadFixture(t)
-	c := correctnessConfig{Source: os.Getenv("GAT_CORRECTNESS_SOURCE"), Store: os.Getenv("GAT_CORRECTNESS_STORE"), Work: os.Getenv("GAT_CORRECTNESS_WORK"), Report: os.Getenv("GAT_CORRECTNESS_IMPORT_REPORT"), Head: fixture.Head, Pack: fixture.Pack, Facts: fixture.Facts, FactsSHA: fixture.FactsSHA, FactsBytes: fixture.FactsBytes, Population: fixture.Population, Workers: 0, FullLinux: true}
+	c := correctnessConfig{Source: os.Getenv("GYIT_CORRECTNESS_SOURCE"), Store: os.Getenv("GYIT_CORRECTNESS_STORE"), Work: os.Getenv("GYIT_CORRECTNESS_WORK"), Report: os.Getenv("GYIT_CORRECTNESS_IMPORT_REPORT"), Head: fixture.Head, Pack: fixture.Pack, Facts: fixture.Facts, FactsSHA: fixture.FactsSHA, FactsBytes: fixture.FactsBytes, Population: fixture.Population, Workers: 0, FullLinux: true}
 	if verify {
-		c.Report = os.Getenv("GAT_CORRECTNESS_VERIFY_REPORT")
+		c.Report = os.Getenv("GYIT_CORRECTNESS_VERIFY_REPORT")
 	}
 	if c.Source != fixture.Source {
 		t.Fatal("source differs from the independent fixture")
@@ -446,7 +446,7 @@ func correctnessImport(t *testing.T, c correctnessConfig) {
 }
 
 func TestCorrectnessImportLinux(t *testing.T) {
-	if os.Getenv("GAT_RUN_CORRECTNESS_IMPORT") != "1" {
+	if os.Getenv("GYIT_RUN_CORRECTNESS_IMPORT") != "1" {
 		t.Skip("explicit full-source correctness import opt-in required")
 	}
 	correctnessImport(t, correctnessLinuxConfig(t, false))
@@ -533,7 +533,7 @@ func correctnessVerify(t *testing.T, c correctnessConfig) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if os.Getenv("GAT_CORRECTNESS_NEW_IMPORT") == "1" && m.Version != formatVersion {
+	if os.Getenv("GYIT_CORRECTNESS_NEW_IMPORT") == "1" && m.Version != formatVersion {
 		t.Fatalf("new import wrote format %d; want current format %d", m.Version, formatVersion)
 	}
 	report["manifest"] = m
@@ -683,7 +683,7 @@ func correctnessVerify(t *testing.T, c correctnessConfig) {
 }
 
 func TestCorrectnessVerifyLinux(t *testing.T) {
-	if os.Getenv("GAT_RUN_CORRECTNESS_VERIFY") != "1" {
+	if os.Getenv("GYIT_RUN_CORRECTNESS_VERIFY") != "1" {
 		t.Skip("explicit persisted-store core verification opt-in required")
 	}
 	correctnessVerify(t, correctnessLinuxConfig(t, true))

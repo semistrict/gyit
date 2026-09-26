@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	sizewire "gat/internal/globalsizes/wire"
-	"gat/internal/store"
+	sizewire "gyit/internal/globalsizes/wire"
+	"gyit/internal/store"
 )
 
 type globalTransferStore struct {
@@ -69,7 +69,7 @@ type globalPressureRow struct {
 // Return no borrowed bytes: only the charged slot may retain a read copy later.
 func globalReadFixtureTable(t *testing.T, ctx context.Context, backend store.Store) globalSizeRef {
 	t.Helper()
-	f, err := os.Open(os.Getenv("GAT_GLOBAL_SIZE_TABLE"))
+	f, err := os.Open(os.Getenv("GYIT_GLOBAL_SIZE_TABLE"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func globalReadFixtureTable(t *testing.T, ctx context.Context, backend store.Sto
 		t.Fatal(err)
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256(b))
-	if hash != os.Getenv("GAT_GLOBAL_SIZE_TABLE_SHA256") {
+	if hash != os.Getenv("GYIT_GLOBAL_SIZE_TABLE_SHA256") {
 		t.Fatal("table artifact differs from frozen manifest")
 	}
 	ref := globalSizeRef{Key: "index/global-sizes-" + hash, Hash: hash, Length: int64(len(b))}
@@ -129,10 +129,10 @@ func globalCheckPageAndStat(t *testing.T, ctx context.Context, s *Snapshot, c la
 }
 
 func TestGlobalSizeReadCosts(t *testing.T) {
-	if os.Getenv("GAT_GLOBAL_SIZE_READ_PROBE") != "1" {
+	if os.Getenv("GYIT_GLOBAL_SIZE_READ_PROBE") != "1" {
 		t.Skip("opt-in fixed-source API read probe")
 	}
-	report := os.Getenv("GAT_GLOBAL_SIZE_READ_REPORT")
+	report := os.Getenv("GYIT_GLOBAL_SIZE_READ_REPORT")
 	if report == "" {
 		t.Fatal("report required")
 	}

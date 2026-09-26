@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func packedImportFixture(t *testing.T) (string, string, string) {

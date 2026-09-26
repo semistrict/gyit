@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"gat/internal/pathspec"
+	"gyit/internal/pathspec"
 )
 
 type showChange struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"gat/internal/store"
+	"gyit/internal/store"
 )
 
 func TestNonCommitReferencesMatchGit(t *testing.T) {
