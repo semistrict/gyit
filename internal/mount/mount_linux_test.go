@@ -329,7 +329,7 @@ func TestMountedSwitchAndConcurrentPublisher(t *testing.T) {
 	}
 	read(m1, "a", before)
 	read(m2, "a", before)
-	client := control.Client{Socket: socket}
+	client := control.Client{Endpoint: socket}
 	if status, err := client.Status(context.Background()); err != nil || status.Sha != first {
 		t.Fatal("initial status", status, err)
 	}

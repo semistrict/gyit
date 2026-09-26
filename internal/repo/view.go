@@ -124,3 +124,12 @@ func parseViewFlags(f *flag.FlagSet, args []string) error {
 	}
 	return f.Parse(append(append(options, "--"), positional...))
 }
+
+// Keep immutable payload leases available through the pinned-publication view.
+func (s viewStore) Acquire(ctx context.Context, key string, off, n int64) ([]byte, func(), error) {
+	if key == "HEAD" {
+		b, _, err := s.Get(ctx, key, off, n)
+		return b, func() {}, err
+	}
+	return store.Acquire(ctx, s.Store, key, off, n)
+}

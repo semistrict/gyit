@@ -268,15 +268,18 @@ func (s *Snapshot) ReadAt(ctx context.Context, oid string, dest []byte, off int6
 		if off >= size {
 			break
 		}
-		b, err := s.readChunk(ctx, c)
+		b, release, err := s.borrowChunk(ctx, c)
 		if err != nil {
+			release()
 			return n, err
 		}
 		expected := min(int64(ChunkSize), size-part*ChunkSize)
 		if int64(len(b)) != expected {
+			release()
 			return n, fmt.Errorf("invalid chunk size")
 		}
 		copied := copy(dest[n:], b[off%ChunkSize:])
+		release()
 		n += copied
 		off += int64(copied)
 	}
@@ -315,8 +318,9 @@ func (s *Snapshot) readAtLegacy(ctx context.Context, oid string, dest []byte, of
 				return n, err
 			}
 		}
-		b, err := s.readChunk(ctx, c)
+		b, release, err := s.borrowChunk(ctx, c)
 		if err != nil {
+			release()
 			return n, err
 		}
 		expected := int64(ChunkSize)
@@ -324,9 +328,11 @@ func (s *Snapshot) readAtLegacy(ctx context.Context, oid string, dest []byte, of
 			expected = remain
 		}
 		if int64(len(b)) != expected {
+			release()
 			return n, fmt.Errorf("invalid chunk size")
 		}
 		copied := copy(dest[n:], b[off%ChunkSize:])
+		release()
 		n += copied
 		off += int64(copied)
 	}
@@ -337,3 +343,32 @@ func (s *Snapshot) readAtLegacy(ctx context.Context, oid string, dest []byte, of
 }
 
 func IsNotFound(err error) bool { return errors.Is(err, store.ErrNotFound) }
+
+// NewDisk uses one persistent decoded-data cache. No compressed store wrapper or
+// retained RAM byte cache is installed. Small decode bookkeeping remains in RAM.
+func NewDisk(s store.Store, dir, identity string, budget int64) (*Repository, error) {
+	disk, err := store.NewDiskCache(nil, dir, identity, budget)
+	if err != nil {
+		return nil, err
+	}
+	r, err := New(s, DefaultCacheBytes)
+	if err != nil {
+		disk.Close()
+		return nil, err
+	}
+	r.cache.max = 0
+	r.cache.disk = disk
+	return r, nil
+}
+
+func (r *Repository) Close() error {
+	r.globalMu.Lock()
+	defer r.globalMu.Unlock()
+	if r.globalSizes != nil {
+		_ = r.globalSizes.clear(context.Background())
+	}
+	if r.cache.disk != nil {
+		return r.cache.disk.Close()
+	}
+	return nil
+}

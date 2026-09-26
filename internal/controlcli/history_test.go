@@ -172,7 +172,7 @@ func TestHistoryCommandsAgainstGit(t *testing.T) {
 			t.Fatal("accepted invalid input", args)
 		}
 	}
-	client := control.Client{Socket: socket}
+	client := control.Client{Endpoint: socket}
 	var lines []string
 	err = client.Blame(ctx, &pb.BlameRequest{Path: []byte("file")}, func(e *pb.BlameLine) error {
 		lines = append(lines, string(e.Content))

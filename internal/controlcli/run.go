@@ -15,6 +15,10 @@ import (
 )
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "checkout" {
+		args = append([]string(nil), args...)
+		args[0] = "switch"
+	}
 	if len(args) > 0 && IsViewCommand(args[0]) {
 		run := func(ctx context.Context, out io.Writer) error { return runView(ctx, args, out) }
 		if args[0] == "show" {
@@ -31,7 +35,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		})
 	}
 	if len(args) == 0 || (args[0] != "status" && args[0] != "switch") {
-		return fmt.Errorf("usage: gat <status|switch|log|diff|blame|annotate> [--socket PATH] [REVISION]")
+		return fmt.Errorf("usage: gat <status|switch|checkout|log|diff|blame|annotate> [--socket PATH] [REVISION]")
 	}
 	f := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	f.SetOutput(stderr)
@@ -99,7 +103,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
-	client := control.Client{Socket: *socket}
+	client := control.Client{Endpoint: *socket}
 	var s *pb.Snapshot
 	var err error
 	if args[0] == "status" {

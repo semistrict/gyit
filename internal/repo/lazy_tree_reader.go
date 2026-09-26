@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	wirecodec "gat/internal/packcodec"
 	storagev1 "gat/internal/gen/gat/storage/v1"
+	wirecodec "gat/internal/packcodec"
 	"gat/internal/store"
 	"google.golang.org/protobuf/proto"
 )
@@ -272,6 +272,8 @@ func (s *Snapshot) readNativeTree(ctx context.Context, c chunk) ([]byte, error) 
 		return nil, fmt.Errorf("native tree encoded closure limit")
 	}
 	return s.idx.cache.load(ctx, "tree/"+c.Hash, func() ([]byte, error) {
+		reads := store.NewReadScope(s.idx.store)
+		defer reads.Close()
 		// Root cache keys are deliberately separate: a native root can exceed
 		// 64KiB, while a cached target always passed the target-size bound.
 		var root []byte
@@ -290,7 +292,7 @@ func (s *Snapshot) readNativeTree(ctx context.Context, c chunk) ([]byte, error) 
 		var wg sync.WaitGroup
 		for i, part := range parts {
 			wg.Go(func() {
-				packed[i], _, errors[i] = s.idx.store.Get(fetchCtx, part.Pack, part.Offset, part.Length)
+				packed[i], _, errors[i] = reads.Get(fetchCtx, part.Pack, part.Offset, part.Length)
 				if errors[i] != nil {
 					cancel()
 				}

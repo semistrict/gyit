@@ -95,31 +95,7 @@ func ListenStream(ctx context.Context, path string, handler StreamHandler) (*Ser
 			go func() {
 				defer workers.Done()
 				defer func() { <-slots }()
-				defer conn.Close()
-				stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
-				defer stop()
-				_ = conn.SetDeadline(time.Now().Add(requestTimeout))
-				req := new(pb.Request)
-				send := func(resp *pb.Response) error { return writeFrame(conn, resp) }
-				if err := readFrame(conn, req); err != nil {
-					_ = send(failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "malformed control request"))
-					return
-				}
-				timeout := operationTimeout(req)
-				reqCtx, reqCancel := context.WithTimeout(ctx, timeout)
-				defer reqCancel()
-				peerDone := make(chan struct{})
-				go func() {
-					var extra [1]byte
-					_, _ = conn.Read(extra[:])
-					reqCancel()
-					close(peerDone)
-				}()
-				defer func() { _ = conn.Close(); <-peerDone }()
-				stopRequest := context.AfterFunc(reqCtx, func() { _ = conn.Close() })
-				defer stopRequest()
-				_ = conn.SetDeadline(time.Now().Add(timeout))
-				_ = handler(reqCtx, req, send)
+				serveConnection(ctx, conn, handler)
 			}()
 		}
 	}()
@@ -128,3 +104,32 @@ func ListenStream(ctx context.Context, path string, handler StreamHandler) (*Ser
 
 // Close cancels in-flight operations, closes their connections, and joins workers.
 func (s *Server) Close() { s.cancel(); <-s.done }
+
+// serveConnection applies identical framing, deadlines and cancellation to both transports.
+func serveConnection(ctx context.Context, conn net.Conn, handler StreamHandler) {
+	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	_ = conn.SetDeadline(time.Now().Add(requestTimeout))
+	req := new(pb.Request)
+	send := func(resp *pb.Response) error { return writeFrame(conn, resp) }
+	if err := readFrame(conn, req); err != nil {
+		_ = send(failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "malformed control request"))
+		return
+	}
+	timeout := operationTimeout(req)
+	reqCtx, reqCancel := context.WithTimeout(ctx, timeout)
+	defer reqCancel()
+	peerDone := make(chan struct{})
+	go func() {
+		var extra [1]byte
+		_, _ = conn.Read(extra[:])
+		reqCancel()
+		close(peerDone)
+	}()
+	defer func() { _ = conn.Close(); <-peerDone }()
+	stopRequest := context.AfterFunc(reqCtx, func() { _ = conn.Close() })
+	defer stopRequest()
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	_ = handler(reqCtx, req, send)
+}

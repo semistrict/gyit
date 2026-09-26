@@ -21,10 +21,17 @@ type Controller struct {
 	writer     chan struct{}
 	history    chan struct{}
 	previous   *repo.Snapshot
+	validate   func(context.Context, *repo.Snapshot) error
 }
 
 func New(repository *repo.Repository, initial *repo.Snapshot) *Controller {
-	c := &Controller{repository: repository, writer: make(chan struct{}, 1), history: make(chan struct{}, 2)}
+	return NewWithValidator(repository, initial, nil)
+}
+
+// NewWithValidator checks mount-specific constraints before installing a version.
+// The caller validates initial before constructing the controller.
+func NewWithValidator(repository *repo.Repository, initial *repo.Snapshot, validate func(context.Context, *repo.Snapshot) error) *Controller {
+	c := &Controller{repository: repository, writer: make(chan struct{}, 1), history: make(chan struct{}, 2), validate: validate}
 	c.current.Store(initial)
 	return c
 }
@@ -85,6 +92,9 @@ func (c *Controller) Handle(ctx context.Context, req *pb.Request) *pb.Response {
 			next = c.previous
 		default:
 			next, err = c.repository.OpenRevision(ctx, revision, current.SHA)
+		}
+		if err == nil && next != current && c.validate != nil {
+			err = c.validate(ctx, next)
 		}
 		if err != nil {
 			if ctx.Err() != nil {

@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -31,10 +33,15 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gat <import|mount|status|switch|log|diff|blame|annotate|show|ls-tree|ls-files|cat-file|grep|branch|tag|show-ref|rev-parse|rev-list|merge-base|shortlog|ls|cat> [options]")
+		return fmt.Errorf("usage: gat <import|mount|status|switch|checkout|log|diff|blame|annotate|show|ls-tree|ls-files|cat-file|grep|branch|tag|show-ref|rev-parse|rev-list|merge-base|shortlog|ls|cat> [options]")
 	}
-	if controlcli.IsViewCommand(args[0]) || args[0] == "switch" || args[0] == "status" || args[0] == "log" || args[0] == "diff" || args[0] == "blame" || args[0] == "annotate" {
+	if controlcli.IsViewCommand(args[0]) || args[0] == "switch" || args[0] == "checkout" || args[0] == "status" || args[0] == "log" || args[0] == "diff" || args[0] == "blame" || args[0] == "annotate" {
 		return controlcli.Run(ctx, args, os.Stdout, os.Stderr)
+	}
+	switch args[0] {
+	case "import", "mount", "ls", "cat":
+	default:
+		return fmt.Errorf("unknown subcommand %q; run gat without arguments for usage", args[0])
 	}
 	f := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	location := f.String("store", "", "local path, file:///path, or s3://bucket/prefix")
@@ -48,8 +55,11 @@ func run(ctx context.Context, args []string) error {
 	rev := f.String("rev", "", "import this revision's history (default: all refs)")
 	tmp := f.String("temp-dir", "", "directory for disk-backed import staging")
 	sha := f.String("sha", "", "full imported commit ID")
-	cache := f.Int("cache-mib", 32, "maximum cached index and file data in MiB")
-	socket := f.String("socket", "", "mount control socket path (required for mount)")
+
+	f.Int("cache-mib", 0, "deprecated: no separate RAM data cache; ignored")
+	diskDir := f.String("disk-cache-dir", "", "disk cache directory (default: user cache directory per mount)")
+	diskMiB := f.Int64("disk-cache-mib", 4096, "maximum decoded disk cache in MiB (also reserves 20 GiB free disk); 0 disables")
+	socket := f.String("socket", "", "optional legacy Unix control socket (default: virtual control file)")
 	if err := f.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -83,16 +93,53 @@ func run(ctx context.Context, args []string) error {
 		fmt.Printf("generation %s (%d new objects, %d compressed bytes uploaded)\n", stats.Generation, stats.Objects, stats.UploadedBytes)
 		return nil
 	}
-	if *cache < 0 || *cache > 4096 {
-		return fmt.Errorf("--cache-mib must be between 0 and 4096")
+	if *diskMiB < 0 || *diskMiB > 1<<30 {
+		return fmt.Errorf("--disk-cache-mib must be between 0 and 1073741824")
 	}
-	r, err := repo.New(s, *cache<<20)
+	if args[0] == "mount" && f.NArg() != 1 {
+		return fmt.Errorf("mount requires --sha and a mountpoint")
+	}
+	var r *repo.Repository
+	{
+		identity := *location
+		if !strings.Contains(identity, "://") {
+			identity, err = filepath.Abs(identity)
+			if err != nil {
+				return err
+			}
+		}
+		identity = *endpoint + "\x00" + *region + "\x00" + identity
+		dir := *diskDir
+		if dir == "" {
+			base, e := os.UserCacheDir()
+			if e != nil {
+				return e
+			}
+			scope := args[0]
+			if args[0] == "mount" {
+				scope, err = filepath.Abs(f.Arg(0))
+				if err != nil {
+					return err
+				}
+			}
+			dir = filepath.Join(base, "gat", "decoded-v1", fmt.Sprintf("%x", sha256.Sum256([]byte(scope))))
+		}
+		cached, e := repo.NewDisk(s, dir, identity, *diskMiB<<20)
+		if e != nil {
+			return e
+		}
+		defer cached.Close()
+		r = cached
+	}
+	if r == nil {
+		r, err = repo.New(s, 0)
+	}
 	if err != nil {
 		return err
 	}
 	if args[0] == "mount" {
-		if f.NArg() != 1 || *socket == "" {
-			return fmt.Errorf("mount requires --sha, --socket, and a mountpoint")
+		if f.NArg() != 1 {
+			return fmt.Errorf("mount requires --sha and a mountpoint")
 		}
 		return mount.Run(ctx, r, *sha, f.Arg(0), *socket)
 	}

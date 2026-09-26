@@ -4,7 +4,7 @@ package gat.control.v1;
 
 option go_package = "gat/internal/gen/gat/control/v1;controlv1";
 
-// Each Unix connection carries one request and a unary response or bounded stream.
+// Each control-file handle or Unix connection carries one request and response stream.
 // Every message has a four-byte big-endian length prefix (maximum 64 KiB).
 message Request {
   uint32 version = 1;
@@ -74,6 +74,8 @@ enum ErrorCode {
 message MountEndpoint {
   uint32 version = 1;
   string socket = 2;
+  // Virtual file served by FUSE; no separate socket or on-disk file is created.
+  string control_file = 3;
 }
 
 // Log streams one LogEntry per frame, then LogEnd. An Error terminates a stream.

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"gat/internal/store"
 	"strings"
 
 	"gat/internal/archive"
@@ -71,6 +72,8 @@ func archiveDataKey(kind string, oid [20]byte) string {
 func (s *Snapshot) readArchiveObject(ctx context.Context, kind string, r archivewire.Recipe) ([]byte, error) {
 	key := archiveDataKey(kind, r.TargetOID)
 	result, err := s.idx.cache.load(ctx, key, func() ([]byte, error) {
+		reads := store.NewReadScope(s.idx.store)
+		defer reads.Close()
 		var base *archivewire.VerifiedBase
 		for i := len(r.Frames) - 1; i >= 0; i-- {
 			if b, ok := s.idx.cache.get(archiveDataKey(kind, r.Frames[i].OID)); ok {
@@ -82,7 +85,7 @@ func (s *Snapshot) readArchiveObject(ctx context.Context, kind string, r archive
 			}
 		}
 		fetch := func(ctx context.Context, segment uint64, off, n uint32) ([]byte, error) {
-			b, _, err := s.idx.store.Get(ctx, archive.Key(r.ArchiveID, segment), int64(off), int64(n))
+			b, _, err := reads.Get(ctx, archive.Key(r.ArchiveID, segment), int64(off), int64(n))
 			return b, err
 		}
 		b, _, err := archivewire.ReadObject(ctx, kind, r, r.TargetOID, fetch, base, func(i int, b []byte) { s.idx.cache.put(archiveDataKey(kind, r.Frames[i].OID), b) })

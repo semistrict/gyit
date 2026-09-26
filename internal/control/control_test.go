@@ -34,7 +34,7 @@ func startServer(t *testing.T, handler Handler) (Client, *Server) {
 		t.Fatal(err)
 	}
 	t.Cleanup(server.Close)
-	return Client{Socket: path}, server
+	return Client{Endpoint: path}, server
 }
 
 func statusRequest() *pb.Request {
@@ -79,11 +79,11 @@ func TestWireBoundsAndFragments(t *testing.T) {
 func TestSocketConcurrencyValidationAndCleanup(t *testing.T) {
 	c := New(nil, &repo.Snapshot{SHA: strings.Repeat("a", 40), Tree: "tree"})
 	client, server := startServer(t, c.Handle)
-	info, err := os.Stat(client.Socket)
+	info, err := os.Stat(client.Endpoint)
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatal("socket permissions", info, err)
 	}
-	idle, err := net.Dial("unix", client.Socket)
+	idle, err := net.Dial("unix", client.Endpoint)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestSocketConcurrencyValidationAndCleanup(t *testing.T) {
 			t.Fatal("typed error", err)
 		}
 	}
-	conn, err := net.Dial("unix", client.Socket)
+	conn, err := net.Dial("unix", client.Endpoint)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestSocketConcurrencyValidationAndCleanup(t *testing.T) {
 		t.Fatal("oversized request", response, err)
 	}
 	server.Close()
-	if _, err := os.Stat(client.Socket); !os.IsNotExist(err) {
+	if _, err := os.Stat(client.Endpoint); !os.IsNotExist(err) {
 		t.Fatal("socket not removed", err)
 	}
 	_ = idle.SetReadDeadline(time.Now().Add(time.Second))

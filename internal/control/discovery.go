@@ -46,6 +46,12 @@ func discoverMount(start string, read func(string) ([]byte, error)) (string, str
 			if endpoint.Version != Version {
 				return "", "", fmt.Errorf("unsupported mount control version %d at %s", endpoint.Version, dir)
 			}
+			if endpoint.ControlFile != "" {
+				if endpoint.Socket != "" || endpoint.ControlFile != filepath.Join(dir, ControlFileName) {
+					return "", "", fmt.Errorf("invalid mount control file at %s", dir)
+				}
+				return controlFilePrefix + endpoint.ControlFile, dir, nil
+			}
 			if !filepath.IsAbs(endpoint.Socket) {
 				return "", "", fmt.Errorf("mount control socket at %s must be absolute", dir)
 			}

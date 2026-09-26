@@ -67,6 +67,8 @@ func TestPositionalRevisionAndInterspersedFlags(t *testing.T) {
 	defer server.Close()
 	for _, revision := range []string{"main", "UpperCase", "v1.0", "HEAD~3^2", "-", "@{-1}", "deadbeef"} {
 		for _, args := range [][]string{
+			{"checkout", "--socket", socket, revision},
+			{"checkout", revision, "--socket", socket},
 			{"switch", "--socket", socket, revision},
 			{"switch", revision, "--socket", socket},
 			{"switch", "--socket=" + socket, "--", revision},

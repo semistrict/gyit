@@ -24,9 +24,11 @@ import (
 
 type node struct {
 	fs.Inode
+	readOnlyMutations
 	state           *control.Controller
 	path            string
 	controlEndpoint []byte
+	controlFiles    *control.FileServer
 }
 type file struct {
 	snapshot *repo.Snapshot
@@ -39,8 +41,8 @@ func inode(path string) uint64 {
 	}
 	h := sha256.Sum256([]byte(path))
 	n := binary.LittleEndian.Uint64(h[:8])
-	if n < 2 {
-		n += 2
+	if n < 3 {
+		n += 3
 	}
 	return n
 }
@@ -95,6 +97,11 @@ func (n *node) Getxattr(_ context.Context, name string, dest []byte) (uint32, sy
 }
 
 func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	if n.path == "" && name == control.ControlFileName && n.controlFiles != nil {
+		child := &controlNode{server: n.controlFiles}
+		child.attributes(&out.Attr)
+		return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFREG, Ino: 2}), 0
+	}
 	s := n.state.Current()
 	parent, err := s.Resolve(ctx, n.path)
 	if err != nil {
@@ -228,25 +235,40 @@ func (n *node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	return &directory{snapshot: s, tree: e.OID, path: n.path}, 0
 }
 
-// Run serves until unmount or cancellation. Its protobuf control socket supports
-// status and switching to an imported commit without materializing a checkout.
+// Run serves until unmount or cancellation. The virtual control file supports
+// protobuf commands. A nonempty socket also enables the legacy Unix transport.
 func Run(ctx context.Context, r *repo.Repository, sha, mountpoint, socket string) error {
 	s, err := r.OpenRevision(ctx, sha, "")
 	if err != nil {
 		return err
 	}
-	socket, err = filepath.Abs(socket)
+	if err := validateControlPath(ctx, s); err != nil {
+		return err
+	}
+	mountpoint, err = filepath.Abs(mountpoint)
 	if err != nil {
 		return err
 	}
-	endpoint, err := proto.Marshal(&pb.MountEndpoint{Version: control.Version, Socket: socket})
+	address := &pb.MountEndpoint{Version: control.Version, ControlFile: filepath.Join(mountpoint, control.ControlFileName)}
+	if socket != "" {
+		socket, err = filepath.Abs(socket)
+		if err != nil {
+			return err
+		}
+		address.Socket, address.ControlFile = socket, ""
+	}
+	endpoint, err := proto.Marshal(address)
 	if err != nil {
 		return err
 	}
-	st := control.New(r, s)
+	st := control.NewWithValidator(r, s, validateControlPath)
+	files := control.NewFileServer(ctx, st.Serve)
+	defer files.Close()
 	zero := time.Duration(0)
-	server, err := fs.Mount(mountpoint, &node{state: st, controlEndpoint: endpoint}, &fs.Options{
-		MountOptions: fuse.MountOptions{Options: []string{"ro", "default_permissions"}, Name: "gat", FsName: "gat", MaxBackground: 16},
+	server, err := fs.Mount(mountpoint, &node{state: st, controlEndpoint: endpoint, controlFiles: files}, &fs.Options{
+		// Like JuiceFS, read-only data is enforced by the filesystem handlers.
+		// A kernel-wide ro flag would also prohibit writing control requests.
+		MountOptions: fuse.MountOptions{Options: []string{"default_permissions"}, Name: "gat", FsName: "gat", MaxBackground: 16},
 		EntryTimeout: &zero, AttrTimeout: &zero, NegativeTimeout: &zero,
 		RootStableAttr: &fs.StableAttr{Ino: 1},
 	})
@@ -254,11 +276,13 @@ func Run(ctx context.Context, r *repo.Repository, sha, mountpoint, socket string
 		return err
 	}
 	defer server.Unmount()
-	controlServer, err := control.ListenStream(ctx, socket, st.Serve)
-	if err != nil {
-		return fmt.Errorf("control socket: %w", err)
+	if socket != "" {
+		controlServer, err := control.ListenStream(ctx, socket, st.Serve)
+		if err != nil {
+			return fmt.Errorf("control socket: %w", err)
+		}
+		defer controlServer.Close()
 	}
-	defer controlServer.Close()
 	done := make(chan struct{})
 	defer close(done)
 	go func() {

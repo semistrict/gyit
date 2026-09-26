@@ -1,4 +1,18 @@
-# Try the running Linux mount
+# Full Linux repository
+
+Attach from the Mac:
+
+```sh
+limactl shell default tmux attach -t gat-linux
+```
+
+The `linux` window uses the full imported Linux history with a 32 MiB cache.
+Run `gat checkout REVISION`, `gat status`, or ordinary filesystem commands there.
+Mouse support is enabled. Its control channel is the virtual `.gat.control`
+file: no `--socket` option or external socket is required. Earlier shell windows
+remain available so an existing shell is not interrupted during the update.
+
+## Earlier medium-repository demo
 
 The `default` Lima VM has a user service named `gat-demo` running the read-only
 medium fixture at `~/gat-demo/repo`, with a 32 MiB userspace cache. Its object

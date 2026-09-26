@@ -32,7 +32,7 @@ func TestLogStreamingAndMissingTerminator(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		client := Client{Socket: path}
+		client := Client{Endpoint: path}
 		count := 0
 		err = client.Log(context.Background(), "", 20, false, func(*pb.LogEntry) error { count++; return nil })
 		if count != 12 || (complete && err != nil) || (!complete && !errors.Is(err, io.EOF)) {

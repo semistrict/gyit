@@ -91,7 +91,7 @@ func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	}
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
-	client := control.Client{Socket: *socket}
+	client := control.Client{Endpoint: *socket}
 	first := true
 	return client.LogPaths(ctx, request, func(entry *pb.LogEntry) error {
 		if !*oneline && !first {

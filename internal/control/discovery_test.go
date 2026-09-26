@@ -68,6 +68,9 @@ func TestDiscoveryStopsOnInvalidEndpoint(t *testing.T) {
 		{}, {0xff}, make([]byte, maxEndpoint+1),
 		encode(&pb.MountEndpoint{Version: 99, Socket: "/socket"}),
 		encode(&pb.MountEndpoint{Version: Version, Socket: "relative.sock"}),
+		encode(&pb.MountEndpoint{Version: Version, ControlFile: "/outside/.gat.control"}),
+		encode(&pb.MountEndpoint{Version: Version, ControlFile: "relative"}),
+		encode(&pb.MountEndpoint{Version: Version, Socket: "/socket", ControlFile: filepath.Join(cwd, ControlFileName)}),
 	} {
 		calls := 0
 		_, err := discover(cwd, func(string) ([]byte, error) { calls++; return data, nil })
@@ -81,5 +84,29 @@ func TestDiscoveryStopsOnInvalidEndpoint(t *testing.T) {
 	}
 	if _, err := discover(cwd, func(string) ([]byte, error) { return nil, nil }); err == nil || !strings.Contains(err.Error(), "no mounted repository") {
 		t.Fatal("missing mount", err)
+	}
+}
+
+func TestDiscoveryFindsControlFileFromNestedDirectory(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cwd := filepath.Join(root, "nested")
+	if err := os.Mkdir(cwd, 0700); err != nil {
+		t.Fatal(err)
+	}
+	data, err := proto.Marshal(&pb.MountEndpoint{Version: Version, ControlFile: filepath.Join(root, ControlFileName)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	address, gotRoot, err := discoverMount(cwd, func(path string) ([]byte, error) {
+		if path == root {
+			return data, nil
+		}
+		return nil, nil
+	})
+	if err != nil || address != "fuse:"+filepath.Join(root, ".gat.control") || gotRoot != root {
+		t.Fatalf("discovery: %q %q %v", address, gotRoot, err)
 	}
 }

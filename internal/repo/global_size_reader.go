@@ -23,6 +23,8 @@ type globalSizeRef struct {
 // generation or expose a table pointer beyond the callback's lifetime. The
 // entire slot is reserved separately from the ordinary16MiB byte cache.
 type globalSizeSlot struct {
+	disk                           *store.DiskCache
+	release                        func()
 	store                          store.Store
 	gate                           chan struct{}
 	ref                            globalSizeRef
@@ -49,13 +51,31 @@ func (s *globalSizeSlot) with(ctx context.Context, ref globalSizeRef, fn func(*s
 	if s.table == nil || s.ref != ref {
 		// Release old borrowed views before allocating the next generation. Ordinary
 		// LRU eviction cannot release this charged slot or leave an uncharged pin.
+		if s.release != nil {
+			s.release()
+			s.release = nil
+		}
 		s.table = nil
 		s.ref = globalSizeRef{}
 		s.charged.Store(0)
 		if ref.Key == "" || ref.Offset < 0 || ref.Length < 0 || ref.Length > int64(globalTableBudget-sizewire.ReaderMetadataBytes) || ref.Offset > math.MaxInt64-ref.Length {
 			return fmt.Errorf("global table descriptor exceeds slot")
 		}
-		data, _, err := s.store.Get(ctx, ref.Key, ref.Offset, ref.Length)
+		var data []byte
+		var err error
+		release := func() {}
+		mapped := false
+		if s.disk != nil {
+			data, release, mapped, err = s.disk.LoadMapped(ctx, "global-sizes/"+ref.Hash, func() ([]byte, error) { b, _, err := s.store.Get(ctx, ref.Key, ref.Offset, ref.Length); return b, err })
+		} else {
+			data, _, err = s.store.Get(ctx, ref.Key, ref.Offset, ref.Length)
+		}
+		retainedMapping := false
+		defer func() {
+			if !retainedMapping {
+				release()
+			}
+		}()
 		s.loads.Add(1)
 		if err != nil {
 			return err
@@ -74,7 +94,12 @@ func (s *globalSizeSlot) with(ctx context.Context, ref globalSizeRef, fn func(*s
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if s.disk != nil && !mapped {
+			return fn(table)
+		}
 		s.table, s.ref = table, ref
+		s.release = release
+		retainedMapping = true
 		s.charged.Store(retained)
 		for old := s.peak.Load(); retained > old && !s.peak.CompareAndSwap(old, retained); old = s.peak.Load() {
 		}
@@ -94,6 +119,10 @@ func (s *globalSizeSlot) clear(ctx context.Context) error {
 	defer func() { <-s.gate }()
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if s.release != nil {
+		s.release()
+		s.release = nil
 	}
 	s.table = nil
 	s.ref = globalSizeRef{}

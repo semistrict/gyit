@@ -110,7 +110,7 @@ func TestLogMatchesNativeGit(t *testing.T) {
 			t.Fatal("invalid request printed commits", stdout.String())
 		}
 	}
-	client := control.Client{Socket: socket}
+	client := control.Client{Endpoint: socket}
 	if _, err := client.Switch(ctx, "topic"); err != nil {
 		t.Fatal(err)
 	}

@@ -255,7 +255,8 @@ func (idx *index) directoryPage(ctx context.Context, ref pageRef) (*storagev1.Di
 	}
 	// Cache decoded bytes, so the configured budget accounts for expansion.
 	raw, err := idx.cache.load(ctx, "directory/"+ref.Hash, func() ([]byte, error) {
-		data, _, err := idx.store.Get(ctx, ref.Pack, ref.Offset, ref.Length)
+		data, release, err := store.Acquire(ctx, idx.store, ref.Pack, ref.Offset, ref.Length)
+		defer release()
 		if err != nil {
 			return nil, err
 		}

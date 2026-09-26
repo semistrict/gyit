@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"gat/internal/repo"
-	"net"
 	"time"
 
 	pb "gat/internal/gen/gat/control/v1"
@@ -19,7 +18,8 @@ type RemoteError struct {
 
 func (e *RemoteError) Error() string { return fmt.Sprintf("%s: %s", e.Code, e.Message) }
 
-type Client struct{ Socket string }
+// Endpoint is a discovered FUSE control file or an explicit legacy Unix socket.
+type Client struct{ Endpoint string }
 
 func (c Client) Status(ctx context.Context) (*pb.Snapshot, error) {
 	return c.call(ctx, &pb.Request{Version: Version, Operation: &pb.Request_Status{Status: &pb.StatusRequest{}}})
@@ -83,15 +83,13 @@ func (c Client) exchange(ctx context.Context, req *pb.Request, consume func(*pb.
 			}
 		}
 	}()
-	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", c.Socket)
+	conn, err := dialEndpoint(ctx, c.Endpoint)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	deadline, _ := ctx.Deadline()
-	_ = conn.SetDeadline(deadline)
 	if err := writeFrame(conn, req); err != nil {
 		return err
 	}

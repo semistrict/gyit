@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"gat/internal/store"
 	"strings"
 	"sync"
 
@@ -213,6 +214,8 @@ func (s *Snapshot) readChunk(ctx context.Context, c chunk) ([]byte, error) {
 		}
 	}
 	return s.idx.cache.load(ctx, "data/"+c.Hash, func() ([]byte, error) {
+		reads := store.NewReadScope(s.idx.store)
+		defer reads.Close()
 		var chain []chunkBase
 		var raw []byte
 		for p := &loc; p != nil; p = p.Base {
@@ -231,7 +234,7 @@ func (s *Snapshot) readChunk(ctx context.Context, c chunk) ([]byte, error) {
 		var wg sync.WaitGroup
 		for i, part := range chain {
 			wg.Go(func() {
-				packed[i], _, errs[i] = s.idx.store.Get(fetchCtx, part.Pack, part.Offset, part.Length)
+				packed[i], _, errs[i] = reads.Get(fetchCtx, part.Pack, part.Offset, part.Length)
 				if errs[i] != nil {
 					cancel()
 				}
@@ -319,4 +322,41 @@ func (c *baseCache) put(hint string, b *deltaBase) {
 	}
 	c.entries = append(c.entries, baseCandidate{hint, b})
 	c.used += cost
+}
+
+// borrowChunk exposes a decoded disk hit directly to the caller's read buffer.
+// Temporary decode outputs are owned only until the caller releases them.
+func (s *Snapshot) borrowChunk(ctx context.Context, c chunk) ([]byte, func(), error) {
+	noop := func() {}
+	if s.idx.cache.disk == nil {
+		b, err := s.readChunk(ctx, c)
+		return b, noop, err
+	}
+	key := "data/" + c.Hash
+	if c.ArchiveRecipe != "" {
+		r, err := checkedArchiveChunk(c)
+		if err != nil {
+			return nil, noop, err
+		}
+		key = archiveDataKey("blob", r.TargetOID)
+	} else {
+		loc := chunkLocation(c)
+		if _, err := loc.depth(); err != nil {
+			return nil, noop, err
+		}
+		native := strings.HasPrefix(c.Pack, "packs/native-") || strings.HasPrefix(c.Pack, "packs/nativechain-")
+		if native && loc.Base != nil && loc.Base.Base != nil {
+			return nil, noop, fmt.Errorf("native payload must be a root plus one bundle")
+		}
+		for p := &loc; p != nil; p = p.Base {
+			valid := validChunkRange(*p)
+			if native {
+				valid = deferredNativeRange(*p)
+			}
+			if !valid {
+				return nil, noop, fmt.Errorf("invalid chunk range")
+			}
+		}
+	}
+	return s.idx.cache.disk.Load(ctx, key, func() ([]byte, error) { return s.readChunk(ctx, c) })
 }

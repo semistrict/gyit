@@ -107,7 +107,7 @@ func runHistory(ctx context.Context, args []string, out, stderr io.Writer) error
 	*socket = resolvedSocket
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
-	client := control.Client{Socket: *socket}
+	client := control.Client{Endpoint: *socket}
 	if command == "diff" {
 		req := &pb.DiffRequest{Paths: converted, NameOnly: nameOnly, NameStatus: nameStatus, ContextLines: uint32(unified)}
 		if len(revisions) > 0 {

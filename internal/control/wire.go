@@ -9,7 +9,8 @@ import (
 )
 
 const Version = 1
-const maxFrame = 64 << 10
+const MaxFrameSize = 64 << 10
+const maxFrame = MaxFrameSize
 
 func readFrame(r io.Reader, message proto.Message) error {
 	var header [4]byte

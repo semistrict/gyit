@@ -94,7 +94,7 @@ func runView(ctx context.Context, args []string, out io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return (control.Client{Socket: socket}).View(ctx, &pb.ViewRequest{Command: args[0], Arguments: forwarded, PathPrefix: []byte(prefix), MountRoot: []byte(root)}, func(b []byte) error { _, err := out.Write(b); return err })
+	return (control.Client{Endpoint: socket}).View(ctx, &pb.ViewRequest{Command: args[0], Arguments: forwarded, PathPrefix: []byte(prefix), MountRoot: []byte(root)}, func(b []byte) error { _, err := out.Write(b); return err })
 }
 
 func viewOptionHasValue(command, option string) bool {

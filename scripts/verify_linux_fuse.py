@@ -167,14 +167,14 @@ def main():
             logs.append(log)
             processes.append(subprocess.Popen([str(args.binary), 'mount', '--store', str(args.store),
                                                '--sha', oracle['revisions']['head'], '--cache-mib', '32',
-                                               '--socket', str(socket), str(mount)], env=env,
+                                               str(mount)], env=env,
                                               stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
         def ready():
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 for p in processes:
                     require(p.poll() is None, 'mount process exited before readiness')
-                if all(mounted(m) for m in mounts) and all(s.exists() for s in sockets):
+                if all(mounted(m) for m in mounts) and all((m / '.gat.control').is_file() for m in mounts):
                     return
                 time.sleep(0.05)
             raise TimeoutError('two mounts did not become ready')

@@ -79,7 +79,7 @@ func TestStatusMatchesNativeGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer server.Close()
-	client := control.Client{Socket: socket}
+	client := control.Client{Endpoint: socket}
 	for _, revision := range []string{"", "HEAD", "other", head, "-", "v1", "HEAD~0", "main", "main~1", "main", "refs/heads/main", "main"} {
 		if revision != "" {
 			git("checkout", "-q", revision)

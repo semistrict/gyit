@@ -40,7 +40,7 @@ func TestHistoryStreamsRequireTerminator(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			client := Client{Socket: socket}
+			client := Client{Endpoint: socket}
 			n := 0
 			if kind == "diff" {
 				err = client.Diff(context.Background(), &pb.DiffRequest{}, func([]byte) error { n++; return nil })
@@ -76,7 +76,7 @@ func TestHistoryCanceledClientStopsServerWork(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- (Client{Socket: filepath.Join(dir, "s")}).Blame(ctx, &pb.BlameRequest{}, func(*pb.BlameLine) error { return nil })
+		done <- (Client{Endpoint: filepath.Join(dir, "s")}).Blame(ctx, &pb.BlameRequest{}, func(*pb.BlameLine) error { return nil })
 	}()
 	select {
 	case <-started:

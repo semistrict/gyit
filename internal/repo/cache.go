@@ -3,6 +3,7 @@ package repo
 import (
 	"container/list"
 	"context"
+	"gat/internal/store"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
@@ -13,6 +14,7 @@ type cached struct {
 	data []byte
 }
 type cache struct {
+	disk      *store.DiskCache
 	mu        sync.Mutex
 	max, used int
 	items     map[string]*list.Element
@@ -26,6 +28,15 @@ func newCache(max int) *cache {
 }
 
 func (c *cache) get(key string) ([]byte, bool) {
+	if c.disk != nil {
+		b, release, err := c.disk.Load(context.Background(), key, func() ([]byte, error) { return nil, store.ErrNotFound })
+		defer release()
+		if err != nil {
+			return nil, false
+		}
+		return append([]byte(nil), b...), true
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e := c.items[key]
@@ -37,6 +48,12 @@ func (c *cache) get(key string) ([]byte, bool) {
 }
 
 func (c *cache) put(key string, data []byte) {
+	if c.disk != nil {
+		_, release, _ := c.disk.Load(context.Background(), key, func() ([]byte, error) { return data, nil })
+		release()
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(data) > c.max || c.max == 0 {

@@ -43,7 +43,9 @@ func (r *Repository) bindGlobalIndex(ctx context.Context, m manifest, idx *index
 		// Shrink the existing shared object in place: old snapshots must not retain
 		// a separate32MiB cache beside the new16MiB reservation.
 		r.cache.mu.Lock()
-		r.cache.max = globalOrdinaryBudget
+		if r.cache.disk == nil {
+			r.cache.max = globalOrdinaryBudget
+		}
 		for r.cache.used > r.cache.max {
 			e := r.cache.lru.Back()
 			v := e.Value.(cached)
@@ -53,6 +55,7 @@ func (r *Repository) bindGlobalIndex(ctx context.Context, m manifest, idx *index
 		}
 		r.cache.mu.Unlock()
 		r.globalSizes = newGlobalSizeSlot(r.store)
+		r.globalSizes.disk = r.cache.disk
 	}
 	slot := r.globalSizes
 	r.globalMu.Unlock()

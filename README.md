@@ -37,10 +37,8 @@ go build -o gat ./cmd/gat
 
 # Use a full commit ID. The mount command stays in the foreground.
 mkdir -p /tmp/linux-mount
-install -d -m 700 "$HOME/.local/run/gat"
 ./gat mount --store s3://my-bucket/linux --region us-east-1 \
-  --sha FULL_COMMIT_SHA --cache-mib 32 \
-  --socket "$HOME/.local/run/gat/control.sock" /tmp/linux-mount
+  --sha FULL_COMMIT_SHA /tmp/linux-mount
 
 # In another terminal, put the built client on PATH, then enter the mount.
 # Run the export from this source directory. Other mounts keep their current SHA.
@@ -226,7 +224,7 @@ contain ordered parent positions, tree IDs and a 64-byte changed-path Bloom
 filter. A negative filter skips the first-parent tree lookup; positives use the
 normal exact comparison. Merges retain parent order, and false positives affect
 only speed. Blame keeps one decoded block as a work buffer (at most 1 MiB on the
-wire); encoded blocks share the existing 32 MiB cache. Unchanged commits skipped
+wire); encoded blocks share the decoded disk cache. Unchanged commits skipped
 by the filter do not consume the candidate-visit limit. No complete graph is
 loaded, and old stores remain readable through the original walker.
 
@@ -322,16 +320,11 @@ Larger files use independent 1 MiB chunk addressing, so a partial read need not
 fetch the entire file. Conversion delta chunks need at most depth + 1 payload
 GETs; embedded dependency ranges avoid walking history to locate bases.
 
-The default retained-data cache budget is **32 MiB**, not a process RSS limit.
-Format-8 stores require at least 32 MiB configured. They reserve 16 MiB for a
-single generation's global size table, including its owned lookup metadata, and
-use a shared 16 MiB LRU for other retained data. Views and snapshots share this
-reservation; switching generations replaces the table in the same slot. The
-current format-8 implementation does not enlarge these two budgets when a larger
-cache is configured. Older conversion stores use the configured LRU budget and
-permit `--cache-mib 0`. Cache bookkeeping, bounded in-flight decode buffers,
-query work buffers, FUSE inodes/handles, and the Go runtime consume extra memory.
-Readers write no checkout or persistent data cache to local disk.
+Readers use one persistent, uncompressed disk cache; there is no separate RAM
+byte cache. The OS page cache controls which mapped pages stay resident.
+Bookkeeping, bounded decode buffers, query work buffers, FUSE inodes/handles,
+and the Go runtime still consume memory. Format-8 global size tables use mapped
+cache bytes with small lookup metadata in RAM.
 
 Import staging is separate from the reader cache. It uses temporary mapped
 metadata tables, bounded queues, external sorting where needed, and pack upload
@@ -346,6 +339,33 @@ It does not reuse the previous archive generation incrementally. Conversion
 imports into formats 4–6 can reuse prior blobs and index subtrees and add only
 new reachable history. Switching from an archive store to conversion also builds
 a complete replacement. Both modes preserve existing readers and use atomic CAS.
+
+### Persistent disk cache
+
+The cache defaults to **4 GiB**, reduced as needed to preserve **20 GiB free**
+on its filesystem. It checks available space before admitting data and once per
+second while open. Under pressure it evicts least-recently-used entries; active
+mappings delay their own eviction until released. If the reserve cannot be met,
+new reads use temporary buffers without populating the cache. Other disk writers
+can consume space concurrently, so this is an eviction policy, not a disk quota.
+
+Files contain reconstructed file chunks, decoded directories, and immutable
+metadata. Compressed storage ranges are fetched only on misses and never retained
+in another cache tier. File reads borrow mmap data directly; metadata consumers
+may use temporary owned buffers. Mutable `HEAD` always bypasses caching.
+
+Use `--disk-cache-mib` to change the maximum, `--disk-cache-dir /path` to choose
+its location, or `--disk-cache-mib 0` to disable retention. The old `--cache-mib`
+flag is accepted for compatibility but ignored. Default directories live under
+the OS user cache directory in `gat/decoded-v1`, isolated by mountpoint and
+repository. Entries survive remounts. A directory has one process owner;
+simultaneous mounts need separate directories (different mountpoints get these
+by default). The budget charges at least 4 KiB per entry and retains at most
+65,536 entries; filesystem metadata is additional. Old compressed-cache
+directories are not reused.
+
+Imports use separate staging and do not populate this cache. Uncached data and
+publication metadata still require the store; this is not an offline clone.
 
 ## Concurrency and checkout semantics
 
@@ -365,17 +385,27 @@ publication may have an ambiguous outcome: inspect the latest publication before
 retrying. This protects competing importers but does not schedule writers or merge
 conflicting source refs.
 
-The mode-0600 control socket lives outside the checkout in a private (0700)
-directory. From the mount or any subdirectory, `gat status` prints Git-style
-clean-checkout status (branch name or detached HEAD), and `gat switch REVISION`
-switches only that mount. The client walks up
-from its physical working directory to the nearest root carrying the
-`user.gat.control` extended attribute, a protobuf `MountEndpoint` with the socket
-address. The attribute and status RPC require no object-store reads; normal
-filesystem path resolution may read directory metadata. No hidden file or
-reserved path is added to the checkout. An explicit `--socket PATH` overrides
-discovery, including when called outside the mount. Invalid endpoint attributes
-fail at that mount rather than silently selecting another ancestor.
+Mounts serve a virtual, mode-0600 `.gat.control` file, like JuiceFS's `.control`.
+It is hidden from directory listings and exists only inside FUSE. Each command
+opens it for one framed protobuf exchange; there is no separate socket to name,
+create, or clean up. The client walks physical ancestors to the nearest root's
+protobuf `user.gat.control` attribute, which identifies that virtual file.
+Discovery and status require no object-store reads beyond ordinary path lookup.
+`gat status` reports the clean checkout; `gat switch REVISION` and
+`gat checkout REVISION` switch only that mount. Checkout is a revision-switch
+alias; it does not implement writable Git index or file-restoration operations.
+A missing or unknown subcommand is a usage error.
+
+Repository writes, metadata changes, creation, deletion, and renames are rejected
+by FUSE handlers. The kernel-wide `ro` flag is intentionally absent so control
+requests can be written, as in JuiceFS. `.gat.control` is reserved at the root;
+a mount or checkout containing a tracked entry with that name is rejected without
+hiding the tracked file or changing the selected version.
+
+An explicit `mount --socket PATH` retains the legacy Unix transport for older
+clients; its directory must be private (0700). Client `--socket PATH` remains an
+optional override. Normal mounting and commands need neither option. Invalid
+endpoint attributes fail at that mount rather than selecting another ancestor.
 Supported targets include branches, qualified refs, tags (including annotated
 and nested tags), unique abbreviated object IDs, `HEAD`, `@`, ancestry chains
 such as `HEAD~3^2`, and commit peeling (`^{}` / `^{commit}`). A unique remote
@@ -408,20 +438,20 @@ are serialized while status requests and filesystem readers continue.
 
 The protocol is defined in
 [`proto/gat/control/v1/control.proto`](proto/gat/control/v1/control.proto): one
-request per Unix connection, with one response for status/switch or a stream of
+request per control-file handle (or legacy Unix connection), with one response for status/switch or a stream of
 log entries, diff chunks or blame lines followed by an explicit end marker. Every message is framed with a
 four-byte big-endian length and limited to 64 KiB. Envelopes carry protocol version 1, typed operations,
-and typed errors. Up to 16 connections are handled concurrently. Oversized or
+and typed errors. Each transport admits up to 16 active requests. Response
+streaming uses backpressure rather than buffering a complete command result. Oversized or
 malformed frames are rejected, and shutdown cancels and joins active handlers.
 This replaces the earlier newline protocol; old clients must be rebuilt. A lost
 response can mean the switch already completed: query status before retrying.
-Existing socket paths are never overwritten; after an unclean exit, verify the
-old server is gone before removing its stale socket. Normal unmount removes it.
+For the optional legacy transport, existing socket paths are never overwritten;
+normal unmount removes its socket. The default virtual file leaves no socket behind.
 
-JuiceFS's local command channel was the reference: its commands open `.control`
-and exchange binary messages with the filesystem. Here the channel is an
-Unix socket discovered through a root attribute, with protobuf for both discovery
-and requests, avoiding reserved names inside a Git tree.
+JuiceFS's local command channel is the reference: commands open a synthetic file
+and exchange binary messages with the filesystem. Gat uses the same file-based
+transport with protobuf for discovery and requests.
 See [LIMA.md](LIMA.md) for the local running demo and its commands.
 
 A new checkout reads
@@ -581,7 +611,7 @@ and [go-fuse filesystem interfaces](https://pkg.go.dev/github.com/hanwen/go-fuse
 
 ## Read-only object and history views
 
-The same `gat` binary discovers the control socket from any directory in a mount:
+The same `gat` binary discovers the mount control endpoint from any directory in a mount:
 
 ```sh
 gat show HEAD
@@ -644,7 +674,7 @@ are rejected.
 Reference lists have a 16 MiB metadata limit. Directory traversal retains at
 most 16 MiB of active directory metadata. Graph membership uses compact bitsets
 with an 8 MiB bound per set; older stores use a bounded fallback. These temporary
-query buffers are separate from the shared 32 MiB data cache, and the daemon runs
+query buffers are separate from the shared decoded disk cache, and the daemon runs
 at most two history/view queries concurrently. No full checkout is downloaded.
 
 ## Bounded import performance checks

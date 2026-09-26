@@ -7,6 +7,7 @@ import (
 	"fmt"
 	probev1 "gat/internal/gen/gat/probe/v1"
 	wirecodec "gat/internal/packcodec"
+	"gat/internal/store"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"strings"
@@ -27,6 +28,8 @@ func (s *Snapshot) readNativeFlat(ctx context.Context, c chunk) ([]byte, error) 
 		}
 	}
 	return s.idx.cache.load(ctx, "data/"+c.Hash, func() ([]byte, error) {
+		reads := store.NewReadScope(s.idx.store)
+		defer reads.Close()
 		var chain []chunkBase
 		var raw []byte
 		for p := &loc; p != nil; p = p.Base {
@@ -41,7 +44,7 @@ func (s *Snapshot) readNativeFlat(ctx context.Context, c chunk) ([]byte, error) 
 		packed := make([][]byte, len(chain))
 		errs := make([]error, len(chain))
 		if len(chain) == 2 && chain[0].Pack == chain[1].Pack && chain[1].Offset+chain[1].Length == chain[0].Offset {
-			p, _, err := s.idx.store.Get(ctx, chain[1].Pack, chain[1].Offset, chain[1].Length+chain[0].Length)
+			p, _, err := reads.Get(ctx, chain[1].Pack, chain[1].Offset, chain[1].Length+chain[0].Length)
 			if err != nil {
 				return nil, err
 			}
@@ -55,7 +58,7 @@ func (s *Snapshot) readNativeFlat(ctx context.Context, c chunk) ([]byte, error) 
 			var wg sync.WaitGroup
 			for i, part := range chain {
 				wg.Go(func() {
-					packed[i], _, errs[i] = s.idx.store.Get(fetchCtx, part.Pack, part.Offset, part.Length)
+					packed[i], _, errs[i] = reads.Get(fetchCtx, part.Pack, part.Offset, part.Length)
 					if errs[i] != nil {
 						cancel()
 					}
