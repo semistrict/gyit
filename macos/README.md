@@ -67,3 +67,15 @@ or publish a download. Provisioning profiles, Keychain credentials, and build
 products remain outside tracked sources. Apple requires Developer ID signing,
 hardened runtime, a secure timestamp, and an authorized distribution profile
 for restricted entitlements.
+
+To publish a GitHub release from the default branch, run:
+
+```sh
+python3 scripts/publish_macos_release.py --team YOUR_TEAM_ID --notary-profile gyit
+```
+
+This rebuilds and notarizes from clean committed source, checks the artifacts,
+pushes the source commit and matching version tag, then uploads the disk image,
+app ZIP, checksums, and notarization receipt using `gh`. It does not change
+repository visibility. If publication fails after notarization, rerun with
+`--reuse-artifacts` to use the same verified files without another submission.
