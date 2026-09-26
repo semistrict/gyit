@@ -103,9 +103,16 @@ def main():
         "-exportPath", exported, "-exportOptionsPlist", export_options,
         "-allowProvisioningUpdates")
     app = exported / "gyit.app"
-    extension = app / "Contents" / "Extensions" / "gyitFS.appex"
-    check_profile(app, args.team + ".com.semistrict.gat", "com.apple.developer.fskit.mount")
-    check_profile(extension, args.team + ".com.semistrict.gat.filesystem",
+    extension = app / "Contents" / "Extensions" / "gyitfs.appex"
+    if not any(entry.name == "gyit.app" for entry in exported.iterdir()):
+        raise RuntimeError("exported app bundle must use lowercase gyit.app")
+    app_metadata = plistlib.loads((app / "Contents" / "Info.plist").read_bytes())
+    if (app_metadata.get("CFBundleIdentifier") != "com.semistrict.gyit" or
+            app_metadata.get("CFBundleName") != "🍑gyit" or
+            not (app / "Contents" / "Resources" / "gyit.icns").is_file()):
+        raise RuntimeError("exported app has incomplete gyit branding")
+    check_profile(app, args.team + ".com.semistrict.gyit", "com.apple.developer.fskit.mount")
+    check_profile(extension, args.team + ".com.semistrict.gyit.filesystem",
                   "com.apple.developer.fskit.fsmodule")
     for bundle in (extension, app):
         check_signature(bundle, identity)
@@ -126,7 +133,7 @@ def main():
             "Timestamp=" not in cli_signature):
         raise RuntimeError("standalone command lacks a timestamped hardened-runtime signature")
     (stage / "INSTALL.txt").write_text(
-        "Install gyit.app in /Applications and enable its file system extension "
+        "Install gyit.app in /Applications and enable the 🍑gyit file system extension "
         "in System Settings. Copy the gyit command to a directory on your PATH, "
         "such as ~/.local/bin. The app mounts repositories at /Volumes/gyit.\n"
     )
@@ -135,7 +142,7 @@ def main():
     (stage / "Applications").symlink_to("/Applications")
     dist.mkdir()
     dmg = dist / f"gyit_{version}_arm64.dmg"
-    run("hdiutil", "create", "-ov", "-volname", "gyit", "-srcfolder", stage,
+    run("hdiutil", "create", "-ov", "-volname", "🍑gyit", "-srcfolder", stage,
         "-format", "UDZO", dmg)
     run("codesign", "--force", "--timestamp", "--sign", identity, dmg)
     if run("git", "status", "--porcelain", capture=True).stdout.strip() or run(

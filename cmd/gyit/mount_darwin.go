@@ -21,7 +21,7 @@ func nativeGitHubMount(ctx context.Context, mountpoint string, budget int64, cac
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	if err = c.Run(); err != nil {
-		return true, fmt.Errorf("native mount: %w; install and enable gyit.app (macos/README.md)", err)
+		return true, fmt.Errorf("native mount: %w; install 🍑gyit and enable gyitfs (macos/README.md)", err)
 	}
 	return true, nil
 }

@@ -20,10 +20,11 @@ python3 scripts/build_macos.py --team YOUR_TEAM_ID
 
 Install `.build/macos/DerivedData/Build/Products/Debug/gyit.app` in Applications.
 Open System Settings → General → Login Items & Extensions → By Category →
-File System Extensions, and enable the extension. The signing identifiers remain
-stable across the project rename to preserve the existing app identity.
+File System Extensions, and enable `gyitfs`. The app and extension
+use `com.semistrict.gyit` identifiers; a previous installation with an older
+identifier needs to be replaced and the new extension enabled once.
 
-The app requires macOS 27. Click **Mount gyit**, then enter a path such as
+The app requires macOS 27. Click **Mount 🍑gyit**, then enter a path such as
 `torvalds/linux` or `owner/repo@feature%2Flogin`. Opening it starts background
 setup. Read `NOTICE` for progress; the complete file tree replaces it when ready.
 Touch the synthetic `NOTICE` to retry a failed setup. Repository files remain

@@ -1,6 +1,6 @@
-# gyit
+# 🍑gyit
 
-gyit mounts GitHub as a read-only filesystem. The path *is* the URL:
+🍑gyit mounts GitHub as a read-only filesystem. The path *is* the URL:
 
 ```text
 /Volumes/gyit/github.com/torvalds/linux/kernel/sched/core.c
@@ -18,11 +18,11 @@ Download the signed, notarized `.dmg`. Requires macOS 27 or later:
 
 **<https://github.com/semistrict/gyit/releases/latest>**
 
-1. Drag `gyit.app` to Applications and launch it.
-2. Enable the file system extension: System Settings → General → Login Items &
+1. Drag `gyit.app` to Applications and launch 🍑gyit.
+2. Enable `gyitfs`: System Settings → General → Login Items &
    Extensions → File System Extensions. (The app's **File System Extension
    Settings** button opens that pane for you.)
-3. Click **Mount gyit**. `/Volumes/gyit` appears.
+3. Click **Mount 🍑gyit**. `/Volumes/gyit` appears.
 4. Type `torvalds/linux` (or `owner/repo@v1.2.3`) and click **Open repository**.
    Finder opens it and setup starts.
 

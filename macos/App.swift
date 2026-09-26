@@ -13,7 +13,12 @@ final class MountModel: ObservableObject {
         FSClient.shared.mountSingleVolume(resource: FSGenericURLResource(url: URL(string:"https://github.com")!), bundleID: Bundle.main.bundleIdentifier! + ".filesystem", options:["-o","gyitcachemib=4096"]) { path,error in
             Task { @MainActor in
                 self.busy = false
-                if let error { self.message = error.localizedDescription }
+                if let error {
+                    let detail = error.localizedDescription
+                    self.message = detail == "Operation not permitted"
+                        ? "Enable gyitfs in File System Extension Settings, then mount again."
+                        : detail
+                }
                 else { self.mountPath = path; self.message = "Ready. Open a repository to start background setup." }
             }
         }
@@ -44,9 +49,9 @@ final class MountModel: ObservableObject {
 struct GyitApp: App {
     @StateObject private var model = MountModel()
     var body: some Scene {
-        WindowGroup("gyit") {
+        WindowGroup("🍑gyit") {
             VStack(alignment:.leading,spacing:16) {
-                Text("gyit").font(.largeTitle)
+                Text("🍑gyit").font(.largeTitle)
                 Text("GitHub, in your filesystem.")
                 if let path = model.mountPath {
                     Text(path.path).font(.system(.body,design:.monospaced))
@@ -57,7 +62,7 @@ struct GyitApp: App {
                         Button("Unmount") { model.unmount() }.disabled(model.busy)
                     }
                 } else {
-                    Button("Mount gyit") { model.mount() }.disabled(model.busy)
+                    Button("Mount 🍑gyit") { model.mount() }.disabled(model.busy)
 
                 }
                 if model.busy { ProgressView().controlSize(.small) }

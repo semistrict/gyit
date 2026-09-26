@@ -6,8 +6,8 @@ files are copied verbatim. Unused compression packages and upstream test fixture
 are omitted. The module replacement is relative and works offline after the other
 dependencies are downloaded.
 
-Only `zstd/gat_cutoff.go`, `zstd/gat_fast_cutoff.go`, and
-`zstd/gat_cutoff_test.go` are local additions. The two implementation files derive
+Only `zstd/gyit_cutoff.go`, `zstd/gyit_fast_cutoff.go`, and
+`zstd/gyit_cutoff_test.go` are local additions. The two implementation files derive
 from upstream `encoder.go` and `enc_fast.go`. Normal encoding and decoding paths
 are unchanged. `EncodeAllBelow` can discard a frame once its minimum encoded size
 cannot beat an already-compressed delta. A stopped result must never be stored.

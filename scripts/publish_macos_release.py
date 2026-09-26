@@ -4,6 +4,7 @@
 import argparse
 import json
 import pathlib
+import plistlib
 import re
 import subprocess
 import sys
@@ -68,10 +69,17 @@ def verify_notarized_assets(image, archive, team):
         run("ditto", "-x", "-k", archive, directory)
         root = pathlib.Path(directory)
         app = root / "gyit.app"
-        extension = app / "Contents" / "Extensions" / "gyitFS.appex"
+        extension = app / "Contents" / "Extensions" / "gyitfs.appex"
+        if not any(entry.name == "gyit.app" for entry in root.iterdir()):
+            raise RuntimeError("archive app bundle must use lowercase gyit.app")
+        app_metadata = plistlib.loads((app / "Contents" / "Info.plist").read_bytes())
+        if (app_metadata.get("CFBundleIdentifier") != "com.semistrict.gyit" or
+                app_metadata.get("CFBundleName") != "🍑gyit" or
+                not (app / "Contents" / "Resources" / "gyit.icns").is_file()):
+            raise RuntimeError("archive app has incomplete gyit branding")
         identity = signing_identity()
-        check_profile(app, team + ".com.semistrict.gat", "com.apple.developer.fskit.mount")
-        check_profile(extension, team + ".com.semistrict.gat.filesystem",
+        check_profile(app, team + ".com.semistrict.gyit", "com.apple.developer.fskit.mount")
+        check_profile(extension, team + ".com.semistrict.gyit.filesystem",
                       "com.apple.developer.fskit.fsmodule")
         for bundle in (extension, app):
             check_signature(bundle, identity)
@@ -128,7 +136,7 @@ def main():
         run("git", "push", "origin", f"refs/tags/{tag}")
 
     notes = (
-        f"gyit {version} for Apple Silicon (macOS 27 or later).\n\n"
+        f"🍑gyit {version} for Apple Silicon (macOS 27 or later).\n\n"
         "Mount public GitHub repositories at `/Volumes/gyit/github.com/owner/repo` "
         "with the gyit app. The download also contains the signed `gyit` command.\n\n"
         "The app and command are Developer ID signed and Apple notarized. "
@@ -136,7 +144,7 @@ def main():
         f"Source commit: `{commit}`.\n"
     )
     result = run("gh", "release", "create", tag, *assets, "--verify-tag",
-                 "--title", f"gyit {version}", "--notes", notes,
+                 "--title", f"🍑gyit {version}", "--notes", notes,
                  "--repo", repo["nameWithOwner"], capture=True)
     print(result.stdout.strip())
 
