@@ -15,8 +15,10 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
+	"gyit/internal/control"
 	"gyit/internal/repo"
 	"gyit/internal/store"
 )
@@ -81,14 +83,17 @@ func parse(path string) ([]string, Target, error) {
 }
 
 type job struct {
-	mu         sync.RWMutex
-	target     Target
-	display    string
-	notice     string
-	snapshot   *repo.Snapshot
-	repository *repo.Repository
-	done       chan struct{}
-	generation uint64
+	control     *control.Server
+	endpoint    string
+	mu          sync.RWMutex
+	target      Target
+	display     string
+	notice      string
+	snapshot    *repo.Snapshot
+	repository  *repo.Repository
+	done        chan struct{}
+	noticeAfter time.Time
+	generation  uint64
 }
 
 func (j *job) status() (*repo.Snapshot, string, uint64) {
@@ -103,6 +108,7 @@ func (j *job) progress(s string) {
 }
 
 type FS struct {
+	controlDir    string
 	opts          Options
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -162,15 +168,56 @@ func (f *FS) Close() error {
 	f.mu.Unlock()
 	f.wg.Wait()
 	for _, j := range f.jobs {
+		if j.control != nil {
+			j.control.Close()
+		}
 		if j.repository != nil {
 			j.repository.Close()
 		}
+	}
+	if f.controlDir != "" {
+		_ = os.RemoveAll(f.controlDir)
 	}
 	err := f.cache.Close()
 	f.lock.Close()
 	return err
 }
-func (f *FS) ensure(t Target, display string) (*job, error) {
+
+// A quick import completes within the calling read. Slower imports expose
+// progress after one shared deadline, without delaying every subsequent read.
+func (f *FS) ensure(ctx context.Context, t Target, display string) (*job, error) {
+	j, err := f.ensureJob(t, display)
+	if err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	done, deadline := j.done, j.noticeAfter
+	f.mu.Unlock()
+	if snapshot, _, _ := j.status(); snapshot != nil {
+		return j, nil
+	}
+	timer := time.NewTimer(max(0, time.Until(deadline)))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+		return j, nil
+	case <-done:
+		if snapshot, _, _ := j.status(); snapshot != nil {
+			return j, nil
+		}
+		// Failures also wait for the notice deadline before exposing a placeholder.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+			return j, nil
+		}
+	}
+}
+
+func (f *FS) ensureJob(t Target, display string) (*job, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.closed {
@@ -193,6 +240,7 @@ func (f *FS) ensure(t Target, display string) (*job, error) {
 // start requires f.mu; retries reuse the job and never duplicate active setup.
 func (f *FS) start(j *job) {
 	t := j.target
+	j.noticeAfter = time.Now().Add(3 * time.Second)
 	done := j.done
 	f.wg.Add(1)
 	go func() {
@@ -278,7 +326,7 @@ func (f *FS) Lookup(ctx context.Context, path string) (repo.Entry, error) {
 	if len(p) == 2 {
 		return directory(p[1]), nil
 	}
-	j, err := f.ensure(t, strings.Join(p[:2], "/"))
+	j, err := f.ensure(ctx, t, strings.Join(p[:2], "/"))
 	if err != nil {
 		return repo.Entry{}, err
 	}
@@ -332,7 +380,7 @@ func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo
 		}
 		f.mu.Unlock()
 	} else {
-		j, err := f.ensure(t, strings.Join(p[:2], "/"))
+		j, err := f.ensure(ctx, t, strings.Join(p[:2], "/"))
 		if err != nil {
 			return nil, err
 		}
@@ -381,7 +429,7 @@ func (f *FS) Read(ctx context.Context, path string, b []byte, off int64) (int, e
 	if len(p) < 3 {
 		return 0, syscall.EISDIR
 	}
-	j, err := f.ensure(t, strings.Join(p[:2], "/"))
+	j, err := f.ensure(ctx, t, strings.Join(p[:2], "/"))
 	if err != nil {
 		return 0, err
 	}

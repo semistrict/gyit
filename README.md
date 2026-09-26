@@ -10,8 +10,9 @@ browsing and IDE use. The only supported mount mode is the GitHub namespace.
 /Volumes/gyit/github.com/owner/repo@0123456789abcdef0123456789abcdef01234567/
 ```
 
-Opening a repository starts background setup. Until it completes, the directory
-contains only `NOTICE`, which reports progress or the failure. Once setup
+Opening a repository waits up to three seconds for setup. If it completes within
+that time, the real files appear directly. Otherwise the directory contains only
+`NOTICE`, which reports progress or the failure while setup continues. Once setup
 succeeds, the complete repository replaces that placeholder in one publication.
 If the repository itself has a `NOTICE`, its real file appears at that point.
 
@@ -22,10 +23,14 @@ Repository path inode numbers remain stable when setup completes.
 
 ## How setup works
 
-Setup uses Git's transport to fetch one shallow snapshot, then imports it into
-local immutable repository storage. Directory and file reads use that local
-store, so IDE indexing does not consume an API request per file. No full-history
-clone runs in the background. At most two setups run concurrently.
+Setup uses Git's transport to fetch complete history, all public branches and
+tags, then imports them into gyit's durable immutable repository storage. The
+selected revision remains pinned. Setup finishes only after full history is
+imported; there is no separate history store or later history fetch triggered by
+a command. Directory and file reads load data on demand from this store, so IDE
+indexing does not consume an API request per file. At most two setups run
+concurrently. Existing shallow stores are not reused; repositories are prepared
+again under `repositories-v1` on their next setup.
 
 The volume root contains `github.com`. Owner directories list public GitHub
 repositories. Listings are
@@ -82,9 +87,11 @@ platform-specific integration checks. Git LFS files remain pointer files and
 submodules appear as empty directories. Git transport throttling and ordinary
 network failures still apply.
 
-The existing history commands (`log`, `blame`, `diff`, and related commands)
-operate on the older imported-store control interface; they are not wired to
-the GitHub mount yet. [Object-store tools](OBJECT_STORE_COMMANDS.md),
+Run `gyit log` inside a repository or subdirectory. The CLI discovers the
+mount through a protobuf root attribute and reads the mounted, pinned repository
+through its private local command socket. History stays in the same durable
+gyit object store; commands do not fetch a second copy. GitHub paths remain pinned;
+open another `@revision` path instead of using checkout. [Object-store tools](OBJECT_STORE_COMMANDS.md),
 [storage layout](OBJECT_STORE.md), and [historical benchmarks](BENCHMARKS.md)
 describe that engine, not measured GitHub setup performance.
 
@@ -93,6 +100,8 @@ describe that engine, not measured GitHub setup performance.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for checks. Structured persisted metadata
 uses protobuf, generated with Buf. The ordinary test suite uses small local
 fixtures; no large repository download is required.
+
+Apple Silicon signing and notarization are described in [the macOS guide](macos/README.md).
 
 gyit is licensed under [LGPL-2.1-or-later](LICENSE). Third-party code retains
 its existing notices and licenses; see [THIRD_PARTY.md](THIRD_PARTY.md).

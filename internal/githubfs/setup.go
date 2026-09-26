@@ -91,7 +91,7 @@ func (w *progressWriter) Write(b []byte) (int, error) {
 		if len(line) > 1500 {
 			line = line[len(line)-1500:]
 		}
-		w.update("Fetching snapshot through Git…\n" + line)
+		w.update("Fetching complete repository history through Git…\n" + line)
 		w.last = time.Now()
 	}
 	return len(b), nil
@@ -119,7 +119,7 @@ func (f *FS) prepare(ctx context.Context, t Target, progress func(string)) (*rep
 	if err != nil {
 		return nil, nil, err
 	}
-	final := filepath.Join(f.opts.DataDir, "snapshots", storeID(t, sha))
+	final := filepath.Join(f.opts.DataDir, "repositories-v1", storeID(t, sha))
 	if _, err = os.Stat(filepath.Join(final, "HEAD")); err == nil {
 		progress("Opening prepared snapshot…")
 		return f.open(ctx, final)
@@ -136,7 +136,7 @@ func (f *FS) prepare(ctx context.Context, t Target, progress func(string)) (*rep
 	if out, err := f.git(ctx, source, "init", "--bare", "--quiet").CombinedOutput(); err != nil {
 		return nil, nil, fmt.Errorf("initialize snapshot: %w: %s", err, out)
 	}
-	cmd := f.git(ctx, source, "fetch", "--depth=1", "--no-tags", "--force", "--progress", remote, sha)
+	cmd := f.git(ctx, source, "fetch", "--tags", "--force", "--progress", remote, sha, "+refs/heads/*:refs/heads/*")
 	cmd.Stderr = &progressWriter{update: progress}
 	if err = cmd.Run(); err != nil {
 		return nil, nil, fmt.Errorf("fetch snapshot: %w", err)
@@ -144,10 +144,13 @@ func (f *FS) prepare(ctx context.Context, t Target, progress func(string)) (*rep
 	if out, err := f.git(ctx, source, "rev-parse", "FETCH_HEAD").Output(); err != nil || !bytes.Equal(bytes.TrimSpace(out), []byte(sha)) {
 		return nil, nil, fmt.Errorf("fetched revision did not match requested commit")
 	}
-	for _, args := range [][]string{{"update-ref", "refs/heads/snapshot", sha}, {"symbolic-ref", "HEAD", "refs/heads/snapshot"}} {
-		if out, err := f.git(ctx, source, args...).CombinedOutput(); err != nil {
-			return nil, nil, fmt.Errorf("pin snapshot: %w: %s", err, out)
-		}
+	// Never publish an incomplete graph, including when the source is shallow.
+	if out, err := f.git(ctx, source, "rev-parse", "--is-shallow-repository").Output(); err != nil || strings.TrimSpace(string(out)) != "false" {
+		return nil, nil, fmt.Errorf("complete repository history is required")
+	}
+	// Detach HEAD at the requested commit while retaining every fetched branch.
+	if out, err := f.git(ctx, source, "update-ref", "--no-deref", "HEAD", sha).CombinedOutput(); err != nil {
+		return nil, nil, fmt.Errorf("pin revision: %w: %s", err, out)
 	}
 	progress("Preparing local repository data…")
 	build := filepath.Join(staging, "store")

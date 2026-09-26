@@ -201,8 +201,21 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
     func createLink(to item: FSItem, named name: FSFileName, inDirectory directory: FSItem, replyHandler: @escaping (FSFileName?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
     func renameItem(_ item: FSItem, inDirectory source: FSItem, named name: FSFileName, to newName: FSFileName, inDirectory target: FSItem, overItem: FSItem?, replyHandler: @escaping (FSFileName?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
     func removeItem(_ item: FSItem, named name: FSFileName, fromDirectory directory: FSItem, replyHandler: @escaping (Error?) -> Void) { replyHandler(posix(EROFS)) }
-    func supportedXattrNames(for item: FSItem) -> [FSFileName] { [] }
-    func getXattr(named name: FSFileName, of item: FSItem, replyHandler: @escaping (Data?, Error?) -> Void) { replyHandler(nil,posix(ENOATTR)) }
+    func supportedXattrNames(for item: FSItem) -> [FSFileName] {
+        guard let item = item as? GyitItem,
+              let path = String(data:item.path,encoding:.utf8),
+              path.split(separator:"/",omittingEmptySubsequences:false).count == 3,
+              path.hasPrefix("github.com/") else { return [] }
+        return [FSFileName(data:Data("user.gyit.control".utf8))]
+    }
+    func getXattr(named name: FSFileName, of item: FSItem, replyHandler: @escaping (Data?, Error?) -> Void) {
+        guard name.data == Data("user.gyit.control".utf8), let item = item as? GyitItem else { replyHandler(nil,posix(ENOATTR)); return }
+        var bytes: UnsafeMutablePointer<CChar>?; var count: Int32 = 0
+        let code = withPath(item.path) { GyitEndpoint(handle,$0,&bytes,&count) }
+        guard code == 0, let bytes else { replyHandler(nil,posix(code)); return }
+        defer { free(bytes) }
+        replyHandler(Data(bytes:bytes,count:Int(count)),nil)
+    }
     func setXattr(named name: FSFileName, to data: Data?, on item: FSItem, policy: FSVolume.SetXattrPolicy, replyHandler: @escaping (Error?) -> Void) { replyHandler(posix(EROFS)) }
     func listXattrs(of item: FSItem, replyHandler: @escaping ([FSFileName]?, Error?) -> Void) { replyHandler(supportedXattrNames(for:item),nil) }
 

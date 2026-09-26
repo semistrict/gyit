@@ -37,7 +37,7 @@ def generate(root, output, team, bundle_id, app_info, extension_info):
         (output/(name + '.Info.plist')).write_bytes(plistlib.dumps(info))
     shared = dict(ARCHS='arm64', SDKROOT='macosx', MACOSX_DEPLOYMENT_TARGET='26.0',
                   SWIFT_VERSION='5.0', CODE_SIGN_STYLE='Automatic', DEVELOPMENT_TEAM=team,
-                  CODE_SIGN_IDENTITY='Apple Development', GENERATE_INFOPLIST_FILE='NO',
+                  CODE_SIGN_IDENTITY='Apple Development', ENABLE_HARDENED_RUNTIME='YES', GENERATE_INFOPLIST_FILE='NO',
                   ENABLE_USER_SCRIPT_SANDBOXING='YES', ALWAYS_SEARCH_USER_PATHS='NO')
     ext_settings = shared | dict(
         PRODUCT_NAME='gyitFS', PRODUCT_BUNDLE_IDENTIFIER=bundle_id + '.filesystem',

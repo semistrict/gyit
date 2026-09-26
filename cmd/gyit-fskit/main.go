@@ -209,3 +209,28 @@ func GyitRetry(id C.uint64_t, path *C.char) C.int {
 	}
 	return errorCode(s.s.Retry(C.GoString(path)))
 }
+
+//export GyitEndpoint
+func GyitEndpoint(id C.uint64_t, path *C.char, out **C.char, count *C.int) C.int {
+	if path == nil || out == nil || count == nil {
+		return C.int(syscall.EINVAL)
+	}
+	sessions.RLock()
+	defer sessions.RUnlock()
+	s := sessions.items[uint64(id)]
+	if s == nil {
+		return C.int(syscall.EBADF)
+	}
+	ctx, cancel := contextForCall()
+	defer cancel()
+	b, err := s.s.Endpoint(ctx, C.GoString(path))
+	if err != nil {
+		return errorCode(err)
+	}
+	if b == nil {
+		return C.int(syscall.ENOATTR)
+	}
+	*out = (*C.char)(C.CBytes(b))
+	*count = C.int(len(b))
+	return 0
+}

@@ -35,9 +35,11 @@ func (r *Repository) bindGlobalIndex(ctx context.Context, m manifest, idx *index
 		return fmt.Errorf("global size format requires SHA1")
 	}
 	r.globalMu.Lock()
-	if r.configuredCacheBytes < DefaultCacheBytes {
+	// The RAM reservation applies only to heap-backed readers. Disk readers
+	// mmap the table or decode it transiently when it cannot be cached.
+	if r.cache.disk == nil && r.configuredCacheBytes < DefaultCacheBytes {
 		r.globalMu.Unlock()
-		return fmt.Errorf("global size format requires at least32MiB configured cache")
+		return fmt.Errorf("global size format requires at least 32 MiB configured RAM cache")
 	}
 	if r.globalSizes == nil {
 		// Shrink the existing shared object in place: old snapshots must not retain

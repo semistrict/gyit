@@ -187,3 +187,24 @@ func (n *node) Setattr(ctx context.Context, h fs.FileHandle, in *fuse.SetAttrIn,
 	}
 	return n.Getattr(ctx, h, out)
 }
+
+func (n *node) Getxattr(ctx context.Context, name string, dest []byte) (uint32, syscall.Errno) {
+	if name != "user.gyit.control" {
+		return 0, syscall.ENODATA
+	}
+	b, err := n.source.Endpoint(ctx, n.path)
+	if err != nil {
+		return 0, errno(err)
+	}
+	if b == nil {
+		return 0, syscall.ENODATA
+	}
+	if len(dest) == 0 {
+		return uint32(len(b)), 0
+	}
+	if len(dest) < len(b) {
+		return uint32(len(b)), syscall.ERANGE
+	}
+	copy(dest, b)
+	return uint32(len(b)), 0
+}

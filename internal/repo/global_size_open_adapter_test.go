@@ -131,7 +131,7 @@ func TestGlobalOpenHonorsCacheBudgetAndLegacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := small.Open(t.Context(), sha); err == nil || !strings.Contains(err.Error(), "configured cache") {
+	if _, err := small.Open(t.Context(), sha); err == nil || !strings.Contains(err.Error(), "configured RAM cache") {
 		t.Fatal("small cache silently enlarged", err)
 	}
 	if small.cache.max != 8<<20 || small.globalSizes != nil {
@@ -168,5 +168,39 @@ func TestGlobalOpenPointerValidation(t *testing.T) {
 		if err := r.bindGlobalIndex(t.Context(), manifest{Version: globalReaderFormat, Format: "sha1", Root: root}, idx); err == nil {
 			t.Fatalf("bad pointer%d accepted", i)
 		}
+	}
+}
+
+func TestGlobalOpenWithSharedDiskCache(t *testing.T) {
+	for _, budget := range []int64{0, 4096, 64 << 20} {
+		t.Run(fmt.Sprint(budget), func(t *testing.T) {
+			backend, err := store.NewLocal(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, sha, want := globalOpenFixture(t, backend, 0, 11)
+			globalPublishManifest(t, backend, m)
+			disk, err := store.NewDiskCache(nil, t.TempDir(), "shared-global", budget)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer disk.Close()
+			r, err := NewSharedDisk(backend, disk)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			s, err := r.Open(t.Context(), sha)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := s.Resolve(t.Context(), "file")
+			if err != nil || got != want {
+				t.Fatalf("file metadata: %+v, %v", got, err)
+			}
+			if r.cache.max != 0 || r.cache.used != 0 {
+				t.Fatal("shared disk reader created a retained RAM cache")
+			}
+		})
 	}
 }

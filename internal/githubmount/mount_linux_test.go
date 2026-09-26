@@ -3,7 +3,9 @@
 package githubmount
 
 import (
+	"bytes"
 	"context"
+	"gyit/internal/controlcli"
 	"gyit/internal/githubfs"
 	"os"
 	"os/exec"
@@ -113,6 +115,22 @@ func TestMountedBackgroundPublication(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(path, "NOTICE")); !os.IsNotExist(err) {
 		t.Fatalf("NOTICE survived publication: %v", err)
+	}
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(path); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	var log, logErrors bytes.Buffer
+	if err := controlcli.Run(t.Context(), []string{"log", "--oneline", "-n", "1"}, &log, &logErrors); err != nil {
+		t.Fatal(err)
+	}
+	expectedLog := git("log", "--oneline", "--no-decorate", "-n", "1")
+	if strings.TrimSpace(log.String()) != expectedLog {
+		t.Fatalf("mounted log: %q != %q", log.String(), expectedLog)
 	}
 	after, err := os.Stat(path)
 	if err != nil || !os.SameFile(before, after) {

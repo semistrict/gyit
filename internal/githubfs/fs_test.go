@@ -85,7 +85,11 @@ func TestNoticeThenAtomicSnapshot(t *testing.T) {
 	// Occupy setup slots to deterministically inspect the queued state.
 	f.workers <- struct{}{}
 	f.workers <- struct{}{}
+	started := time.Now()
 	entries, err := f.ReadDir(t.Context(), "acme/project", "", 128)
+	if elapsed := time.Since(started); elapsed < 3*time.Second || elapsed > 5*time.Second {
+		t.Fatalf("NOTICE deadline: %s", elapsed)
+	}
 	if err != nil || len(entries) != 1 || entries[0].Name != "NOTICE" {
 		t.Fatalf("initial directory %v %v", entries, err)
 	}
@@ -185,5 +189,35 @@ func TestRootDoesNotStartSetup(t *testing.T) {
 	entries, err := f.ReadDir(context.Background(), "", "", 128)
 	if err != nil || len(entries) != 0 || len(f.jobs) != 0 {
 		t.Fatalf("root %v %v", entries, err)
+	}
+}
+
+func TestQuickSetupReturnsFilesWithoutPlaceholder(t *testing.T) {
+	f, _, _, _ := openFixture(t)
+	started := time.Now()
+	entries, err := f.ReadDir(t.Context(), "acme/project", "", 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(started) >= 3*time.Second {
+		t.Fatal("small local import exceeded synchronous window")
+	}
+	if len(entries) != 2 || f.Generation("acme/project") != 2 {
+		t.Fatalf("not fully published: %v", entries)
+	}
+	if got := read(t, f, "acme/project/NOTICE"); got != "real repository notice\n" {
+		t.Fatalf("placeholder exposed: %q", got)
+	}
+}
+
+func TestSetupWaitHonorsCancellation(t *testing.T) {
+	f, _, _, _ := openFixture(t)
+	f.workers <- struct{}{}
+	f.workers <- struct{}{}
+	defer func() { <-f.workers; <-f.workers }()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
+	defer cancel()
+	if _, err := f.ReadDir(ctx, "acme/project", "", 128); err != context.DeadlineExceeded {
+		t.Fatalf("read: %v", err)
 	}
 }
