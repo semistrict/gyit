@@ -23,6 +23,10 @@ FUSE checks, and remote object-store tests are opt-in; see [benchmarks](BENCHMAR
 [correctness checks](CORRECTNESS.md), and [Linux VM setup](LIMA.md).
 Do not run a full Linux import as part of ordinary tests.
 
+The [test expansion notes](TESTING_RESEARCH.md) describe the seeded real-Git
+fixtures, virtual-time simulations, publication fault schedules, fuzz targets,
+and the audited Gremlins trial, including focused run commands and limits.
+
 Native macOS instructions and bridge tests are in [macos/README.md](macos/README.md).
 A local signed build is not a notarized public app distribution.
 
