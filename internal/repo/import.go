@@ -19,10 +19,10 @@ import (
 	"strconv"
 	"strings"
 
-	"gyit/internal/spill"
-	"gyit/internal/store"
 	"github.com/klauspost/compress/zstd"
 	bolt "go.etcd.io/bbolt"
+	"gyit/internal/spill"
+	"gyit/internal/store"
 )
 
 type ImportOptions struct {
@@ -43,13 +43,22 @@ type ImportOptions struct {
 	DeltaCandidates int
 }
 type Stats struct {
-	Objects, Blobs, Bytes, UploadedBytes int64
-	Chunks, DeltaChunks                  int64
-	MaxDepth                             int
-	Generation                           string
+	retainedPackSource, retainedPackPrefix string
+	retainedPackBytes                      int64
+	Objects, Blobs, Bytes, UploadedBytes   int64
+	Chunks, DeltaChunks                    int64
+	MaxDepth                               int
+	Generation                             string
 	// ImportMode is archive for retained native packs, or reachable for converted objects.
 	ImportMode, FallbackReason string
 	Phase                      string
+}
+
+// RetainedGitPack identifies the immutable source pack copied by this import.
+// Adapters can expose the same bytes without uploading a duplicate Git pack.
+// Empty values mean the source was converted rather than retained.
+func (s Stats) RetainedGitPack() (source, segmentPrefix string, size int64) {
+	return s.retainedPackSource, s.retainedPackPrefix, s.retainedPackBytes
 }
 
 func git(ctx context.Context, dir string, args ...string) *exec.Cmd {

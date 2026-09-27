@@ -102,6 +102,19 @@ what is explicitly *not* measured.
 
 ## Git history, without a checkout
 
+Plain `git log` and `git status` also work inside a prepared repository, including subdirectories.
+Each mount exposes a read-only `.git` with HEAD pinned to that mount's revision,
+refs, and native Git pack files served on demand. Archive imports share their
+existing pack bytes and additionally retain the pack index and a checkout index; conversion
+fallbacks retain a native pack separately. Existing prepared repositories need
+one fresh setup to acquire this metadata. The virtual `.git` currently targets
+read-only use; its checkout index contains stat data matching the served files.
+Status checks every tracked file and scans directories for untracked files.
+Ordinary `show`, revision-to-revision `diff`, `blame`,
+`ls-files`, `ls-tree`, `rev-parse`, `rev-list`, and branch/tag listing are tested
+against native Git too. Git writes remain unsupported.
+
+
 The mount synthesizes a `user.gyit.control` xattr at each repository root; the
 CLI walks up to it and speaks protobuf over the private endpoint it names, so
 there is no daemon to configure. History commands work from anywhere in the tree,
@@ -155,7 +168,8 @@ Plainly, because most of these will matter to you before the novelty wears off:
   it had then; remount to pick up movement.
 - **Linux mounts use direct I/O with zero kernel attribute caching.** That keeps
   content correct at stable inode numbers, but rules out file-backed `mmap`.
-  Tools that require it cannot run directly from the mount.
+  The immutable virtual `.git` files use buffered reads so native Git can mmap
+  its pack and index; other files still use direct I/O.
 - **Git LFS files are pointer files. Submodules are empty directories.**
   Ownership and timestamps are synthetic, names over 255 bytes are rejected, and
   inode numbers are path hashes, so collisions are theoretically possible.

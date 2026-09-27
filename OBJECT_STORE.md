@@ -42,6 +42,30 @@ Here, `HEAD` identifies the latest published **catalog generation**, which may
 contain many commits. It does not choose a branch or mounted commit. Each mount
 selects its own commit and pins immutable catalog roots independently.
 
+## Native Git view in GitHub mounts
+
+GitHub setup also writes `git-directory.pb`, a `GitDirectory` protobuf listing
+virtual `.git` files. `HEAD`, a minimal read-only repository configuration, and
+`packed-refs` are inline. Pack and index descriptors specify their logical size,
+segment prefix, and 64 MiB segment size. Readers translate file offsets into
+object-store range reads without listing or downloading the whole pack.
+
+For archive imports, `.git/objects/pack/*.pack` refers to the existing
+`packs/archive-<import-id>/` segments. The `.idx` file is added under
+`git-files/<pack-name>.idx/`, and a standard checkout index under
+`git-files/index/`. Git creates the checkout index from HEAD without checking
+out files. The portable index contains exact file sizes and the epoch timestamps
+served by the immutable mount. On demand, readers fill in mount-specific inode,
+UID and GID fields and recompute the native Git checksum in the bounded mmap
+cache. No assume-unchanged or skip-worktree flags are exposed: native Git still
+stats tracked files and scans untracked directories. Legacy index templates are
+upgraded in that cache without rewriting or reimporting durable history.
+Conversion fallback imports also retain the native
+pack under `git-files/<pack-name>.pack/`. These are durable repository data,
+not disposable cache entries. Setup writes the descriptor before atomically
+publishing the complete repository directory. Older GitHub publications lack
+this metadata and require one new setup in `repositories-git-v1`.
+
 ## Catalogs and indexes
 
 The main catalog is an immutable B-tree. Each page holds at most 128 records or

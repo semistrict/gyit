@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	sizetable "gyit/internal/globalsizes"
-	sizewire "gyit/internal/globalsizes/wire"
 	"gyit/internal/archive"
 	archivewire "gyit/internal/archive/wire"
+	sizetable "gyit/internal/globalsizes"
+	sizewire "gyit/internal/globalsizes/wire"
 	"gyit/internal/store"
 )
 
@@ -64,6 +64,10 @@ func archiveTestChunk(t *testing.T, r archivewire.Recipe) chunk {
 	return chunk{Hash: fmt.Sprintf("git-sha1:%x", r.TargetOID), ArchiveRecipe: string(b)}
 }
 func archiveSnapshotFixture(t *testing.T) archiveReaderFixture {
+	return archiveSnapshotFixtureTrees(t, nil)
+}
+
+func archiveSnapshotFixtureTrees(t *testing.T, change func([][]byte)) archiveReaderFixture {
 	t.Helper()
 	ctx := t.Context()
 	backend, err := store.NewLocal(t.TempDir())
@@ -104,6 +108,9 @@ func archiveSnapshotFixture(t *testing.T) archiveReaderFixture {
 		raw = append(raw, []byte("120000 link\x00")...)
 		raw = append(raw, blobFrames[0].OID[:]...)
 		f.treeRaw = append(f.treeRaw, raw)
+	}
+	if change != nil {
+		change(f.treeRaw)
 	}
 	var treeFrames []archivewire.Frame
 	for i, raw := range f.treeRaw {
@@ -184,6 +191,34 @@ func archiveSnapshotFixture(t *testing.T) archiveReaderFixture {
 		f.commits = append(f.commits, fmt.Sprintf("%040x", generation+100))
 	}
 	return f
+}
+
+func TestArchivePointLookupRejectsMalformedSibling(t *testing.T) {
+	for _, suffix := range []string{"100644 file", "100644 ../bad", "170000 bad"} {
+		t.Run(suffix, func(t *testing.T) {
+			f := archiveSnapshotFixtureTrees(t, func(trees [][]byte) {
+				trees[1] = append(trees[1], []byte(suffix+"\x00")...)
+				trees[1] = append(trees[1], make([]byte, 20)...)
+			})
+			r, err := New(f.backend, DefaultCacheBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			globalPublishManifest(t, f.backend, f.manifests[1])
+			s, err := r.Open(t.Context(), f.commits[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 2; i++ {
+				if _, err := s.Lookup(t.Context(), s.Tree, "file"); err == nil {
+					t.Fatal("point lookup accepted a malformed sibling")
+				}
+				if _, ok := s.idx.cache.get(archiveDataKey("tree", f.treeRecipes[1].TargetOID)); ok {
+					t.Fatal("malformed tree entered the validated cache")
+				}
+			}
+		})
+	}
 }
 
 type archiveReadMeter struct {

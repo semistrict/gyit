@@ -8,12 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"sort"
 	"strings"
 
+	bolt "go.etcd.io/bbolt"
 	"gyit/internal/spill"
 	"gyit/internal/store"
-	bolt "go.etcd.io/bbolt"
 )
 
 const fanout = 128
@@ -49,21 +48,29 @@ type index struct {
 }
 
 func (idx *index) pageBytes(ctx context.Context, ref pageRef) ([]byte, error) {
+	b, release, err := idx.borrowPage(ctx, ref)
+	defer release()
+	if idx.cache.disk != nil {
+		b = append([]byte(nil), b...)
+	}
+	return b, err
+}
+
+func (idx *index) borrowPage(ctx context.Context, ref pageRef) ([]byte, func(), error) {
 	if !strings.HasPrefix(ref.Pack, "index/") || ref.Offset < 0 || ref.Length <= 0 || ref.Length > indexPackSize || ref.Offset > indexPackSize-ref.Length {
-		return nil, fmt.Errorf("invalid index page range")
+		return nil, func() {}, fmt.Errorf("invalid index page range")
 	}
 	hash, err := hex.DecodeString(ref.Hash)
 	if err != nil || len(hash) != sha256.Size {
-		return nil, fmt.Errorf("invalid index page hash")
+		return nil, func() {}, fmt.Errorf("invalid index page hash")
 	}
-	b, err := idx.cache.load(ctx, "index/"+ref.Hash, func() ([]byte, error) {
+	return idx.cache.borrow(ctx, "index/"+ref.Hash, func() ([]byte, error) {
 		b, _, err := idx.store.Get(ctx, ref.Pack, ref.Offset, ref.Length)
 		if err == nil && (int64(len(b)) != ref.Length || fmt.Sprintf("%x", sha256.Sum256(b)) != ref.Hash) {
 			err = fmt.Errorf("index checksum mismatch")
 		}
 		return b, err
 	})
-	return b, err
 }
 
 func (idx *index) page(ctx context.Context, ref pageRef) (page, error) {
@@ -78,22 +85,18 @@ func (idx *index) page(ctx context.Context, ref pageRef) (page, error) {
 func (idx *index) get(ctx context.Context, key string, out any) error {
 	id := idx.root
 	for id != (pageRef{}) {
-		p, err := idx.page(ctx, id)
+		b, release, err := idx.borrowPage(ctx, id)
 		if err != nil {
+			release()
 			return err
 		}
-		if len(p.Children) == 0 {
-			i := sort.Search(len(p.Items), func(i int) bool { return p.Items[i].Key >= key })
-			if i == len(p.Items) || p.Items[i].Key != key {
-				return store.ErrNotFound
-			}
-			return unmarshal(p.Items[i].Value, out)
+		var next pageRef
+		next, err = lookupIndexPage(b, key, out)
+		release()
+		if err != nil || next == (pageRef{}) {
+			return err
 		}
-		i := sort.Search(len(p.Children), func(i int) bool { return p.Children[i].Max >= key })
-		if i == len(p.Children) {
-			return store.ErrNotFound
-		}
-		id = p.Children[i].ID
+		id = next
 	}
 	return store.ErrNotFound
 }

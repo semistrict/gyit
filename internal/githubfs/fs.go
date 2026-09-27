@@ -84,6 +84,7 @@ func parse(path string) ([]string, Target, error) {
 }
 
 type job struct {
+	git         *gitDirectory
 	control     *control.Server
 	endpoint    string
 	mu          sync.RWMutex
@@ -308,8 +309,20 @@ func (f *FS) start(j *job) {
 			j.progress("Setup failed: " + message + "\nTouch NOTICE to retry.")
 			return
 		}
+		backend, err := store.NewLocal(filepath.Join(f.opts.DataDir, repositoryDirectory, storeID(t, s.SHA)))
+		var gitView *gitDirectory
+		if err == nil {
+			gitView, err = openGitDirectory(f.ctx, backend)
+		}
+		if err != nil {
+			r.Close()
+			j.progress("Setup failed: " + f.redact(err.Error()) + "\nTouch NOTICE to retry.")
+			return
+		}
+		gitView.bindIndex(f.cache, "github.com/"+j.display, s)
 		j.mu.Lock()
 		j.repository = r
+		j.git = gitView
 		j.snapshot = s
 		j.generation++
 		j.mu.Unlock()
@@ -390,6 +403,9 @@ func (f *FS) Lookup(ctx context.Context, path string) (repo.Entry, error) {
 		}
 		return repo.Entry{}, syscall.ENOENT
 	}
+	if name, ok := gitPath(relative); ok {
+		return j.git.lookup(name)
+	}
 	return s.Resolve(ctx, relative)
 }
 func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo.Entry, error) {
@@ -443,6 +459,9 @@ func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo
 			}
 			entries = []repo.Entry{{Name: "NOTICE", Mode: 0100444, Size: int64(len(notice))}}
 		} else {
+			if name, ok := gitPath(strings.Join(p[2:], "/")); ok {
+				return j.git.readDir(name, after, limit)
+			}
 			e, err := s.Resolve(ctx, strings.Join(p[2:], "/"))
 			if err != nil {
 				return nil, err
@@ -453,7 +472,16 @@ func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo
 			if e.Mode != 0040000 {
 				return nil, syscall.ENOTDIR
 			}
-			return s.ReadDir(ctx, e.OID, after, limit)
+			entries, err := s.ReadDir(ctx, e.OID, after, limit)
+			if err != nil {
+				return nil, err
+			}
+			if len(p) == 2 && after < ".git" {
+				entries = append(entries, directory(".git"))
+				sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+				entries = entries[:min(limit, len(entries))]
+			}
+			return entries, nil
 		}
 	}
 	// Deduplicate visited aliases against the remote listing.
@@ -495,6 +523,9 @@ func (f *FS) Read(ctx context.Context, path string, b []byte, off int64) (int, e
 			return 0, nil
 		}
 		return copy(b, notice[off:]), nil
+	}
+	if name, ok := gitPath(relative); ok {
+		return j.git.read(ctx, name, b, off)
 	}
 	e, err := s.Resolve(ctx, relative)
 	if err != nil {

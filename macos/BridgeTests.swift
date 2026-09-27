@@ -12,12 +12,17 @@ struct BridgeTests {
         let inode = root.attrs.fileID
         var entries:UnsafeMutablePointer<GyitEntry>?; var count:Int32=0
         try checked(withPath(path) { p in withPath(Data()) { GyitList(v.handle,p,$0,&entries,&count) } })
-        precondition(count == 2)
-        for i in 0..<Int(count) { precondition(String(cString:entries![i].name) != "NOTICE") }
+        precondition(count == 3)
+        for i in 0..<Int(count) {
+            precondition(String(cString:entries![i].name) != "NOTICE")
+            precondition(FSItem.Identifier(entries![i].parent_inode) == root.attrs.fileID)
+        }
+        let host = try v.item(Data("github.com".utf8))
+        precondition(host.attrs.parentID == .rootDirectory)
         GyitFreeEntries(entries,count)
         var buffer = Data(count:4096); var n:Int32=0
         precondition(withPath(path, { GyitGeneration(v.handle,$0) }) == 2)
-        precondition(v.supportedXattrNames(for:root).contains { $0.data == Data("user.gyit.control".utf8) }, "repository must advertise command discovery to FSKit")
+        precondition(v.xattrNames(for:root).contains { $0.data == Data("user.gyit.control".utf8) }, "repository must advertise command discovery to FSKit")
         var endpoint: Data?
         v.getXattr(named: FSFileName(data:Data("user.gyit.control".utf8)), of: root) { data,error in
             precondition(error == nil && data != nil)
@@ -41,8 +46,21 @@ struct BridgeTests {
         precondition(readyRoot.attrs.fileID == inode)
         let file = try v.item(childPath(path,Data("dir/hello".utf8)))
         precondition(file.attrs.size == 22)
+        precondition(!file.attrs.supportsLimitedXAttrs, "native xattr replies must avoid AppleDouble fallback")
+        v.getXattr(named:FSFileName(string:"com.apple.FinderInfo"),of:file) { data,error in
+            precondition(data == nil && (error as NSError?)?.code == Int(ENOATTR))
+        }
         let dir = try v.item(childPath(path,Data("dir".utf8)))
         precondition(file.attrs.parentID == dir.attrs.fileID)
+        if #available(macOS 27.0, *) {
+            // FSKit validates required metadata when creating Handler results.
+            // A successful lookup must carry enough attributes to avoid a
+            // second metadata request, for both files and directories.
+            for node in [file,dir] {
+                precondition(FSLookupItemResult(foundItem:node,itemName:FSFileName(string:"entry"),itemAttributes:node.attrs) != nil)
+                precondition(FSGetAttributesResult(attributes:node.attrs) != nil)
+            }
+        }
         try checked(buffer.withUnsafeMutableBytes { bytes in withPath(file.path) { GyitRead(v.handle,$0,6,bytes.baseAddress,5,&n) } })
         precondition(n == 5 && buffer.prefix(5) == Data("from ".utf8))
         do { _ = try v.item(childPath(path,Data("NOTICE".utf8))); fatalError("setup NOTICE survived publication") } catch { precondition((error as NSError).code == Int(ENOENT)) }

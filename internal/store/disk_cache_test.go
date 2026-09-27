@@ -4,12 +4,89 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
+
+func TestDiskCacheConcurrentWritesStayWithinBudget(t *testing.T) {
+	origin, _ := NewLocal(t.TempDir())
+	c, err := testDiskCache(origin, t.TempDir(), "parallel-writes", 64<<10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var wg sync.WaitGroup
+	for i := range 32 {
+		wg.Go(func() {
+			want := bytes.Repeat([]byte{byte(i)}, 3000)
+			for j := range 10 {
+				b, release, err := c.Load(t.Context(), fmt.Sprintf("%d/%d", i, j), func() ([]byte, error) { return want, nil })
+				if err != nil || !bytes.Equal(b, want) {
+					t.Errorf("load: %v, bytes match: %v", err, bytes.Equal(b, want))
+				}
+				c.mu.Lock()
+				if c.used > c.max {
+					t.Errorf("in-flight writes exceeded budget: %d > %d", c.used, c.max)
+				}
+				c.mu.Unlock()
+				release()
+			}
+		})
+	}
+	wg.Wait()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.pending) != 0 {
+		t.Fatal("unfinished writes")
+	}
+	files, err := os.ReadDir(c.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var allocated int64
+	for _, f := range files {
+		if f.Name() == "lock" {
+			continue
+		}
+		if len(f.Name()) != 64 {
+			t.Fatalf("unpublished file left behind: %s", f.Name())
+		}
+		info, err := f.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		allocated += diskCost(info.Size())
+	}
+	if allocated != c.used || allocated > c.max {
+		t.Fatalf("disk/accounted/budget: %d/%d/%d", allocated, c.used, c.max)
+	}
+}
+
+func BenchmarkDiskCacheColdParallel(b *testing.B) {
+	origin, _ := NewLocal(b.TempDir())
+	c, err := newDiskCache(origin, b.TempDir(), "cold-writes", 64<<20, func() (int64, int64, error) { return 1 << 40, 1 << 40, nil })
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer c.Close()
+	var next atomic.Uint64
+	payload := bytes.Repeat([]byte("x"), 2048)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, release, err := c.Load(b.Context(), fmt.Sprint(next.Add(1)), func() ([]byte, error) { return payload, nil })
+			release()
+			if err != nil {
+				b.Error(err)
+			}
+		}
+	})
+}
 
 func TestDiskCachePersistsRanges(t *testing.T) {
 	ctx := context.Background()
@@ -289,5 +366,31 @@ func TestDecodedDiskCacheStoresUncompressedBytes(t *testing.T) {
 	})
 	if !found {
 		t.Fatal("decoded bytes not stored verbatim")
+	}
+}
+
+func TestDiskCacheSharesResidentMapping(t *testing.T) {
+	c, err := testDiskCache(nil, t.TempDir(), "shared-mapping", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	load := func() ([]byte, error) { return []byte("immutable"), nil }
+	first, releaseFirst, err := c.Load(t.Context(), "entry", load)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer releaseFirst()
+	second, releaseSecond, err := c.Load(t.Context(), "entry", func() ([]byte, error) { t.Fatal("cached entry fetched twice"); return nil, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer releaseSecond()
+	if &first[0] != &second[0] {
+		t.Fatal("concurrent readers mapped the same immutable cache file twice")
+	}
+	c.Close()
+	if string(first) != "immutable" || string(second) != "immutable" {
+		t.Fatal("closing cache invalidated borrowed data")
 	}
 }

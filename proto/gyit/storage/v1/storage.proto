@@ -205,3 +205,17 @@ message DirectBlobStaged {
   uint64 size = 2;
   ChunkRecord chunk = 3;
 }
+
+// GitDirectory exposes immutable native Git files over the object-store API.
+// Packed object bytes can reference the archive already retained by import.
+message GitDirectory {
+  repeated GitFile files = 1;
+}
+message GitFile {
+  string path = 1;
+  int64 size = 2;
+  // Small files are inline; large files use numbered immutable segments.
+  bytes inline_data = 3;
+  string segment_prefix = 4;
+  int64 segment_size = 5;
+}

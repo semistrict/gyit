@@ -100,6 +100,9 @@ func TestNoticeThenAtomicSnapshot(t *testing.T) {
 	if _, err = f.Lookup(t.Context(), "acme/project/dir/hello"); err == nil {
 		t.Fatal("partial tree visible before setup")
 	}
+	if _, err = f.Lookup(t.Context(), "acme/project/.git/HEAD"); err == nil {
+		t.Fatal("partial Git history visible before setup")
+	}
 	<-f.workers
 	<-f.workers
 	waitReady(t, f, "acme/project")
@@ -110,7 +113,7 @@ func TestNoticeThenAtomicSnapshot(t *testing.T) {
 		t.Fatalf("NOTICE was not replaced by real file: %q", got)
 	}
 	entries, err = f.ReadDir(t.Context(), "acme/project", "", 128)
-	if err != nil || len(entries) != 2 {
+	if err != nil || len(entries) != 3 {
 		t.Fatalf("ready directory %v %v", entries, err)
 	}
 }
@@ -242,7 +245,7 @@ func TestQuickSetupReturnsFilesWithoutPlaceholder(t *testing.T) {
 	if time.Since(started) >= 10*time.Second {
 		t.Fatal("small local import exceeded synchronous window")
 	}
-	if len(entries) != 2 || f.Generation("acme/project") != 2 {
+	if len(entries) != 3 || f.Generation("acme/project") != 2 {
 		t.Fatalf("not fully published: %v", entries)
 	}
 	if got := read(t, f, "acme/project/NOTICE"); got != "real repository notice\n" {

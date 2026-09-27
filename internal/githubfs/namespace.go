@@ -70,3 +70,37 @@ func (n Namespace) Generation(path string) uint64 {
 	}
 	return n.FS.Generation(p)
 }
+
+// ReadyWorktree resolves an entry only after atomic snapshot publication. It
+// never starts an import. A filesystem inode may retain this immutable snapshot
+// identity for its own lifetime instead of resolving every child from the root.
+// Namespace directories, setup NOTICE, and virtual Git metadata return nil.
+func (n Namespace) ReadyWorktree(ctx context.Context, path string) (*repo.Snapshot, repo.Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, repo.Entry{}, err
+	}
+	p, err := namespacePath(path)
+	if err != nil {
+		return nil, repo.Entry{}, nil
+	}
+	parts, target, err := parse(p)
+	if err != nil || len(parts) < 2 {
+		return nil, repo.Entry{}, err
+	}
+	relative := strings.Join(parts[2:], "/")
+	if _, ok := gitPath(relative); ok {
+		return nil, repo.Entry{}, nil
+	}
+	n.FS.mu.Lock()
+	j := n.FS.jobs[target.Key()]
+	n.FS.mu.Unlock()
+	if j == nil {
+		return nil, repo.Entry{}, nil
+	}
+	snapshot, _, _ := j.status()
+	if snapshot == nil {
+		return nil, repo.Entry{}, nil
+	}
+	entry, err := snapshot.Resolve(ctx, relative)
+	return snapshot, entry, err
+}

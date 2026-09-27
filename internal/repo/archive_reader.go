@@ -67,6 +67,9 @@ func checkedArchiveBlob(c chunk, oid string, size, part int64) (archivewire.Reci
 	return r, nil
 }
 func archiveDataKey(kind string, oid [20]byte) string {
+	if kind == "tree" {
+		return fmt.Sprintf("data/archive-tree-validated-v1:%x", oid)
+	}
 	return fmt.Sprintf("data/archive-%s:%x", kind, oid)
 }
 func (s *Snapshot) readArchiveObject(ctx context.Context, kind string, r archivewire.Recipe) ([]byte, error) {
@@ -88,7 +91,24 @@ func (s *Snapshot) readArchiveObject(ctx context.Context, kind string, r archive
 			b, _, err := reads.Get(ctx, archive.Key(r.ArchiveID, segment), int64(off), int64(n))
 			return b, err
 		}
-		b, _, err := archivewire.ReadObject(ctx, kind, r, r.TargetOID, fetch, base, func(i int, b []byte) { s.idx.cache.put(archiveDataKey(kind, r.Frames[i].OID), b) })
+		var treeError error
+		b, _, err := archivewire.ReadObject(ctx, kind, r, r.TargetOID, fetch, base, func(i int, b []byte) {
+			if kind == "tree" {
+				// Cached tree bytes must pass the same complete name/mode and
+				// duplicate checks as a directory listing. This is done once,
+				// so point lookups need not allocate and sort every sibling.
+				if _, err := parseNativeTree(b); err != nil {
+					if i == len(r.Frames)-1 {
+						treeError = err
+					}
+					return
+				}
+			}
+			s.idx.cache.put(archiveDataKey(kind, r.Frames[i].OID), b)
+		})
+		if err == nil && treeError != nil {
+			return nil, treeError
+		}
 		return b, err
 	})
 	if err == nil && len(result) != int(r.Frames[len(r.Frames)-1].Size) {
@@ -104,6 +124,13 @@ func (s *Snapshot) readArchiveBlob(ctx context.Context, c chunk) ([]byte, error)
 	return s.readArchiveObject(ctx, "blob", r)
 }
 func (s *Snapshot) archiveTreeEntries(ctx context.Context, oid string, o object) ([]Dirent, error) {
+	raw, err := s.archiveTreeBytes(ctx, oid, o)
+	if err != nil {
+		return nil, err
+	}
+	return parseNativeTree(raw)
+}
+func (s *Snapshot) archiveTreeBytes(ctx context.Context, oid string, o object) ([]byte, error) {
 	if o.Kind != "tree" || o.Size < 0 || o.Size > nativeTreeBytes || o.Directory.Length <= 0 || o.Directory.Length > archivewire.WireLimit {
 		return nil, fmt.Errorf("archive tree descriptor bounds")
 	}
@@ -132,5 +159,5 @@ func (s *Snapshot) archiveTreeEntries(ctx context.Context, oid string, o object)
 	if err != nil {
 		return nil, err
 	}
-	return parseNativeTree(raw)
+	return raw, nil
 }

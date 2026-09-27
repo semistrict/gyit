@@ -132,6 +132,39 @@ func TestMountedBackgroundPublication(t *testing.T) {
 	if strings.TrimSpace(log.String()) != expectedLog {
 		t.Fatalf("mounted log: %q != %q", log.String(), expectedLog)
 	}
+	// Exercise ordinary Git through FUSE, including its pack/index mmap path.
+	native := exec.CommandContext(t.Context(), "git", "-C", path, "log")
+	native.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat")
+	started := time.Now()
+	nativeOut, nativeErr := native.CombinedOutput()
+	if nativeErr != nil {
+		t.Fatalf("native git log: %v: %s", nativeErr, nativeOut)
+	}
+	if strings.TrimSpace(string(nativeOut)) != git("log") {
+		t.Fatalf("native Git output differs: %s", nativeOut)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Logf("OVER 1s: native git log: %s", elapsed)
+	}
+	for _, args := range [][]string{{"status"}, {"status", "--porcelain"}, {"show", "HEAD"}, {"diff"}, {"blame", "hello"}} {
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", path}, args...)...)
+		cmd.Env = native.Env
+		started := time.Now()
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("native git %v: %v: %s", args, err, out)
+		}
+		if len(args) == 1 && args[0] == "status" {
+			if !strings.Contains(string(out), "working tree clean") {
+				t.Fatalf("status: %s", out)
+			}
+		} else if strings.TrimSpace(string(out)) != git(args...) {
+			t.Fatalf("native git %v differs: %s", args, out)
+		}
+		if elapsed := time.Since(started); elapsed > time.Second {
+			t.Logf("OVER 1s: native git %v: %s", args, elapsed)
+		}
+	}
 	after, err := os.Stat(path)
 	if err != nil || !os.SameFile(before, after) {
 		t.Fatalf("repository identity changed: %v", err)

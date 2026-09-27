@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	storagev1 "gyit/internal/gen/gyit/storage/v1"
-	"gyit/internal/store"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/proto"
+	storagev1 "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 )
 
 func lazyTreeHash(raw []byte) string {
@@ -362,5 +362,54 @@ func TestLazyTreeCompiledFallback(t *testing.T) {
 	n, err := s.LookupName(t.Context(), oid, "file")
 	if err != nil || n != names[0] {
 		t.Fatalf("compiled LookupName: %+v %v", n, err)
+	}
+}
+
+func TestValidatedTreePointLookupMatchesParser(t *testing.T) {
+	oid := strings.Repeat("ab", 20)
+	raw := append(lazyTreeRow(0040000, "a", oid), lazyTreeRow(0100664, "a.b", oid)...)
+	raw = append(raw, lazyTreeRow(0120000, "link", oid)...)
+	raw = append(raw, lazyTreeRow(0160000, "module", oid)...)
+	all, err := parseNativeTree(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range all {
+		got, err := lookupValidatedNativeTree(raw, want.Name)
+		if err != nil || got != want {
+			t.Fatalf("point lookup: %+v %v; want %+v", got, err, want)
+		}
+	}
+	if _, err := lookupValidatedNativeTree(raw, "missing"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+}
+
+func BenchmarkNativeTreePointLookup(b *testing.B) {
+	oid := strings.Repeat("ab", 20)
+	var raw []byte
+	for i := 0; i < 500; i++ {
+		raw = append(raw, lazyTreeRow(0100644, fmt.Sprintf("file-%04d", i), oid)...)
+	}
+	for _, direct := range []bool{false, true} {
+		label := "parse-all"
+		if direct {
+			label = "point"
+		}
+		b.Run(label, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				if direct {
+					if _, err := lookupValidatedNativeTree(raw, "file-0250"); err != nil {
+						b.Fatal(err)
+					}
+				} else {
+					entries, err := parseNativeTree(raw)
+					if err != nil || len(entries) != 500 {
+						b.Fatal(err)
+					}
+				}
+			}
+		})
 	}
 }

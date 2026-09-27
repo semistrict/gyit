@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	archivecopy "gyit/internal/archive"
@@ -94,8 +95,15 @@ func (a *sourceArchiveImport) finish(stats *Stats) error {
 	if err := a.ctx.Err(); err != nil {
 		return err
 	}
+	retainedSource, err := filepath.EvalSymlinks(a.prefix + ".pack")
+	if err != nil {
+		return err
+	}
 	a.countOnce.Do(func() {
 		stats.UploadedBytes += int64(a.copied.Bytes)
+		stats.retainedPackSource = retainedSource
+		stats.retainedPackPrefix = fmt.Sprintf("packs/archive-%x", a.id)
+		stats.retainedPackBytes = a.copied.Bytes
 		streamingTrace("archive_source_bytes", int64(a.copied.Bytes))
 		streamingTrace("archive_segments", int64(a.copied.Segments))
 		p := a.planner.Stats()

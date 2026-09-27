@@ -9,13 +9,14 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
+	"google.golang.org/protobuf/proto"
 	storagev1 "gyit/internal/gen/gyit/storage/v1"
 	wirecodec "gyit/internal/packcodec"
 	"gyit/internal/store"
-	"google.golang.org/protobuf/proto"
 )
 
 const nativeTreeBytes = 64 << 10
@@ -164,6 +165,13 @@ func (s *Snapshot) hydrateDirents(ctx context.Context, names []Dirent) ([]Entry,
 }
 
 func (s *Snapshot) lookupNativeTreeName(ctx context.Context, oid string, o object, name string) (Dirent, error) {
+	if isArchiveTree(o.Directory) {
+		raw, err := s.archiveTreeBytes(ctx, oid, o)
+		if err != nil {
+			return Dirent{}, err
+		}
+		return lookupValidatedNativeTree(raw, name)
+	}
 	entries, err := s.nativeTreeEntries(ctx, oid, o)
 	if err != nil {
 		return Dirent{}, err
@@ -423,4 +431,49 @@ func parseNativeTree(raw []byte) ([]Dirent, error) {
 		}
 	}
 	return out, nil
+}
+
+// The archive reader validates the complete tree, including duplicate names,
+// before caching it under the validated-tree key. A point lookup copies only
+// its selected entry; it never retains a borrowed view into the input bytes.
+func lookupValidatedNativeTree(raw []byte, name string) (Dirent, error) {
+	for len(raw) > 0 {
+		space := bytes.IndexByte(raw, ' ')
+		if space < 1 {
+			return Dirent{}, fmt.Errorf("invalid cached tree mode")
+		}
+		end := bytes.IndexByte(raw[space+1:], 0)
+		if end < 0 {
+			return Dirent{}, fmt.Errorf("invalid cached tree name")
+		}
+		end += space + 1
+		if end+21 > len(raw) {
+			return Dirent{}, io.ErrUnexpectedEOF
+		}
+		if string(raw[space+1:end]) == name {
+			bits, err := strconv.ParseUint(string(raw[:space]), 8, 32)
+			if err != nil {
+				return Dirent{}, err
+			}
+			mode := uint32(bits)
+			canonical := mode & 0170000
+			switch canonical {
+			case 0100000:
+				canonical |= 0644
+				if mode&0100 != 0 {
+					canonical = 0100755
+				}
+			case 0040000, 0120000, 0160000:
+			default:
+				return Dirent{}, fmt.Errorf("invalid cached tree type")
+			}
+			entry := Dirent{Name: name, OID: hex.EncodeToString(raw[end+1 : end+21]), Mode: canonical}
+			if mode != canonical {
+				entry.RawMode = mode
+			}
+			return entry, nil
+		}
+		raw = raw[end+21:]
+	}
+	return Dirent{}, store.ErrNotFound
 }

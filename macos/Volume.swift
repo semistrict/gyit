@@ -12,6 +12,9 @@ func childPath(_ parent: Data, _ name: Data) -> Data { parent.isEmpty ? name : p
 
 final class GyitItem: FSItem {
     let path: Data
+    // Protected by the volume's itemLock. Generation 1 is the mutable setup
+    // namespace; later generations identify a complete immutable snapshot.
+    var generation: UInt64 = 0
     private var storedEntry: GyitEntry
     private let entryLock = NSLock()
     var entry: GyitEntry {
@@ -27,6 +30,8 @@ final class GyitItem: FSItem {
         switch entry.mode & 0o170000 { case 0o040000, 0o160000: return .directory; case 0o120000: return .symlink; default: return .file }
     }
     var attrs: FSItem.Attributes {
+        let entry = self.entry
+        let kind = self.kind
         let a = FSItem.Attributes()
         a.type = kind; a.mode = entry.mode & 0o555
         // Git tree/gitlink modes carry no permission bits; directories must
@@ -35,10 +40,7 @@ final class GyitItem: FSItem {
         if kind == .symlink { a.mode = 0o777 }
         a.size = UInt64(max(0, entry.size)); a.allocSize = a.size
         a.fileID = path.isEmpty ? .rootDirectory : FSItem.Identifier(entry.inode)
-        if path.isEmpty { a.parentID = .parentOfRoot }
-        else if let slash = path.lastIndex(of: 47) {
-            a.parentID = FSItem.Identifier(withPath(Data(path[..<slash])) { GyitInode($0) })
-        } else { a.parentID = .rootDirectory }
+        a.parentID = FSItem.Identifier(entry.parent_inode)
         a.flags = 0
         // Git trees contain no per-file timestamps. Report a deterministic
         // epoch rather than leaving standard attributes unsupported.
@@ -47,7 +49,10 @@ final class GyitItem: FSItem {
         a.birthTime = epoch; a.addedTime = epoch; a.backupTime = epoch
         a.linkCount = kind == .directory ? 2 : 1
         a.uid = getuid(); a.gid = getgid()
-        a.supportsLimitedXAttrs = true
+        // We implement native read-only xattrs, including ENOATTR for absent
+        // values. Limited support makes macOS probe AppleDouble sidecars for
+        // every file while exporting the volume through virtio-fs.
+        a.supportsLimitedXAttrs = false
         return a
     }
 }
@@ -63,7 +68,7 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
             GyitOpen(UnsafeMutablePointer(mutating: data), UnsafeMutablePointer(mutating: cache), UnsafeMutablePointer(mutating: remote), UnsafeMutablePointer(mutating: token), budget, &h)
         } } } }
         try checked(code); handle = h
-        root = GyitItem(path: Data(), entry: GyitEntry(inode: 2, size: 0, mode: 0o040000, name: nil))
+        root = GyitItem(path: Data(), entry: GyitEntry(inode: 2, parent_inode: 1, size: 0, mode: 0o040000, name: nil))
         super.init(volumeID: FSVolume.Identifier(uuid: UUID()), volumeName: FSFileName(string: "gyit"))
         items[Data()] = root
     }
@@ -72,16 +77,23 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
     func item(_ path: Data) throws -> GyitItem {
         itemLock.lock(); defer { itemLock.unlock() }
         if path.isEmpty { return root }
+        // Capture before lookup: a lookup may itself publish the snapshot.
+        // In that case the next request must refresh the pre-publication item.
+        let generation = withPath(path) { GyitGeneration(handle, $0) }
         if let item = items[path] {
+            if generation > 1 && item.generation == generation { return item }
             var fresh = GyitEntry()
             try checked(withPath(path) { GyitLookup(handle, $0, &fresh) })
             item.entry = fresh
+            item.generation = generation
             return item
         }
         let (h, relative) = try route(path)
-        var e = GyitEntry(); try checked(withPath(relative) { GyitLookup(h, $0, &e) })
-        e.inode = withPath(path) { GyitInode($0) }
-        let item = GyitItem(path: path, entry: e); items[path] = item; return item
+        var e = GyitEntry()
+        try checked(withPath(relative) { GyitLookup(h, $0, &e) })
+        let item = GyitItem(path: path, entry: e)
+        item.generation = generation
+        items[path] = item; return item
     }
     var supportedVolumeCapabilities: FSVolume.SupportedCapabilities {
         let c = FSVolume.SupportedCapabilities(); c.supportsSymbolicLinks = true
@@ -111,7 +123,12 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
     }
     func lookupItem(named name: FSFileName, inDirectory directory: FSItem, replyHandler: @escaping (FSItem?, FSFileName?, Error?) -> Void) {
         guard let dir = directory as? GyitItem, !name.data.isEmpty, !name.data.contains(47), !name.data.contains(0) else { return replyHandler(nil,nil,posix(EINVAL)) }
-        do { replyHandler(try item(childPath(dir.path,name.data)),name,nil) } catch { replyHandler(nil,nil,error) }
+        do {
+            let found = try item(childPath(dir.path,name.data))
+            replyHandler(found,name,nil)
+        } catch {
+            replyHandler(nil,nil,error)
+        }
     }
     func getAttributes(_ request: FSItem.GetAttributesRequest, of item: FSItem, replyHandler: @escaping (FSItem.Attributes?, Error?) -> Void) {
         guard let item = item as? GyitItem else { return replyHandler(nil,posix(EINVAL)) }
@@ -151,14 +168,21 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
                 defer { GyitFreeEntries(entries,count) }
                 var full = false
                 for i in 0..<Int(count) {
-                    var entry = entries[i]
+                    let entry = entries[i]
                     let name = Data(bytes: entry.name!, count: strlen(entry.name!))
                     if scanned < ordinal { scanned += 1; after = name; continue }
-                    let path = childPath(dir.path,name)
-                    entry.inode = withPath(path) { GyitInode($0) }
-                    let child = GyitItem(path: path,entry:entry)
+                    let kind: FSItem.ItemType
+                    switch entry.mode & 0o170000 {
+                    case 0o040000, 0o160000: kind = .directory
+                    case 0o120000: kind = .symlink
+                    default: kind = .file
+                    }
+                    // The bridge already supplied the child's stable inode. A
+                    // names-only scan needs neither full attributes nor another
+                    // bridge call for each child and its parent.
+                    let attrs = attributes == nil ? nil : GyitItem(path:childPath(dir.path,name),entry:entry).attrs
                     let next = ordinal + 1
-                    if !packer.packEntry(name: FSFileName(data:name), itemType:child.kind, itemID:child.attrs.fileID, nextCookie:FSDirectoryCookie(rawValue:next+bias), attributes:attributes == nil ? nil : child.attrs) { full = true; break }
+                    if !packer.packEntry(name: FSFileName(data:name), itemType:kind, itemID:FSItem.Identifier(entry.inode), nextCookie:FSDirectoryCookie(rawValue:next+bias), attributes:attrs) { full = true; break }
                     ordinal = next; scanned = next; after = name
                     dir.cursors[ordinal] = after
                     if dir.cursors.count > 256 { dir.cursors = [ordinal:after,0:Data()] }
@@ -201,7 +225,7 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
     func createLink(to item: FSItem, named name: FSFileName, inDirectory directory: FSItem, replyHandler: @escaping (FSFileName?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
     func renameItem(_ item: FSItem, inDirectory source: FSItem, named name: FSFileName, to newName: FSFileName, inDirectory target: FSItem, overItem: FSItem?, replyHandler: @escaping (FSFileName?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
     func removeItem(_ item: FSItem, named name: FSFileName, fromDirectory directory: FSItem, replyHandler: @escaping (Error?) -> Void) { replyHandler(posix(EROFS)) }
-    func supportedXattrNames(for item: FSItem) -> [FSFileName] {
+    func xattrNames(for item: FSItem) -> [FSFileName] {
         guard let item = item as? GyitItem,
               let path = String(data:item.path,encoding:.utf8),
               path.split(separator:"/",omittingEmptySubsequences:false).count == 3,
@@ -217,11 +241,58 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
         replyHandler(Data(bytes:bytes,count:Int(count)),nil)
     }
     func setXattr(named name: FSFileName, to data: Data?, on item: FSItem, policy: FSVolume.SetXattrPolicy, replyHandler: @escaping (Error?) -> Void) { replyHandler(posix(EROFS)) }
-    func listXattrs(of item: FSItem, replyHandler: @escaping ([FSFileName]?, Error?) -> Void) { replyHandler(supportedXattrNames(for:item),nil) }
+    func listXattrs(of item: FSItem, replyHandler: @escaping ([FSFileName]?, Error?) -> Void) { replyHandler(xattrNames(for:item),nil) }
 
     func openItem(_ item: FSItem, modes: FSVolume.OpenModes, replyHandler: @escaping (Error?) -> Void) { replyHandler(modes.contains(.write) ? posix(EROFS) : nil) }
     func closeItem(_ item: FSItem, modes: FSVolume.OpenModes, replyHandler: @escaping (Error?) -> Void) { replyHandler(nil) }
 
+}
+
+@available(macOS 27.0, *)
+extension GyitVolume: FSVolume.Handler {
+    // Returning attributes with lookup lets FSKit populate its vnode metadata
+    // in the same round trip. The Operations conformance remains for macOS 26.
+    func activateVolume(options: FSTaskOptions, replyHandler: @escaping (FSActivateResult?, Error?) -> Void) {
+        replyHandler(FSActivateResult(rootItem:root),nil)
+    }
+    func deactivateVolume(options: FSDeactivateOptions, replyHandler: @escaping (Error?) -> Void) {
+        deactivate(options:options,replyHandler:replyHandler)
+    }
+    func lookupItem(named name: FSFileName, in directory: FSItem, context: FSContext, replyHandler: @escaping (FSLookupItemResult?, Error?) -> Void) {
+        lookupItem(named:name,inDirectory:directory) { item,name,error in
+            guard let item = item as? GyitItem, let name, error == nil else { return replyHandler(nil,error ?? posix(EIO)) }
+            replyHandler(FSLookupItemResult(foundItem:item,itemName:name,itemAttributes:item.attrs),nil)
+        }
+    }
+    func getAttributes(_ request: FSItem.GetAttributesRequest, of item: FSItem, context: FSContext, replyHandler: @escaping (FSGetAttributesResult?, Error?) -> Void) {
+        getAttributes(request,of:item) { attrs,error in
+            guard let attrs, error == nil else { return replyHandler(nil,error ?? posix(EIO)) }
+            replyHandler(FSGetAttributesResult(attributes:attrs),nil)
+        }
+    }
+    func setAttributes(_ request: FSItem.SetAttributesRequest, on item: FSItem, context: FSContext, replyHandler: @escaping (FSSetAttributesResult?, Error?) -> Void) {
+        setAttributes(request,on:item) { attrs,error in
+            guard let attrs, error == nil else { return replyHandler(nil,error ?? posix(EIO)) }
+            replyHandler(FSSetAttributesResult(attributes:attrs,freeSpace:nil),nil)
+        }
+    }
+    func enumerateDirectory(_ directory: FSItem, startingAt cookie: FSDirectoryCookie, verifier: FSDirectoryVerifier, attributes: FSItem.GetAttributesRequest?, packer: FSDirectoryEntryPacker, context: FSContext, replyHandler: @escaping (FSEnumerateDirectoryResult?, Error?) -> Void) {
+        enumerateDirectory(directory,startingAt:cookie,verifier:verifier,attributes:attributes,packer:packer) { current,error in
+            replyHandler(error == nil ? FSEnumerateDirectoryResult(verifier:current.rawValue) : nil,error)
+        }
+    }
+    func readSymbolicLink(_ item: FSItem, context: FSContext, replyHandler: @escaping (FSReadSymlinkResult?, Error?) -> Void) {
+        guard let item = item as? GyitItem else { return replyHandler(nil,posix(EINVAL)) }
+        readSymbolicLink(item) { contents,error in
+            guard let contents, error == nil else { return replyHandler(nil,error ?? posix(EIO)) }
+            replyHandler(FSReadSymlinkResult(contents:contents,symlinkAttributes:item.attrs),nil)
+        }
+    }
+    func createItem(named name: FSFileName, type: FSItem.ItemType, in directory: FSItem, attributes: FSItem.SetAttributesRequest, context: FSContext, replyHandler: @escaping (FSCreateItemResult?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
+    func createSymbolicLink(named name: FSFileName, in directory: FSItem, attributes: FSItem.SetAttributesRequest, linkContents: FSFileName, context: FSContext, replyHandler: @escaping (FSCreateSymlinkResult?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
+    func createLink(to item: FSItem, named name: FSFileName, in directory: FSItem, context: FSContext, replyHandler: @escaping (FSCreateLinkResult?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
+    func renameItem(_ item: FSItem, inDirectory source: FSItem, named name: FSFileName, to newName: FSFileName, inDirectory target: FSItem, overItem: FSItem?, context: FSContext, replyHandler: @escaping (FSRenameItemResult?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
+    func removeItem(_ item: FSItem, named name: FSFileName, from directory: FSItem, context: FSContext, replyHandler: @escaping (FSRemoveItemResult?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
 }
 
 @available(macOS 27.0, *)
@@ -234,4 +305,16 @@ extension GyitVolume: FSVolume.DataCacheHandler {
     func upgrade(_ item: FSItem, cacheMode: FSVolume.DataCacheMode, context: FSContext, replyHandler: @escaping (FSUpgradeItemResult?, Error?) -> Void) {
         replyHandler(FSUpgradeItemResult(grantedCoherency: .noCache),nil)
     }
+}
+
+@available(macOS 27.0, *)
+extension GyitVolume: FSVolume.XattrHandler {
+    func getXattr(named name: FSFileName, of item: FSItem, context: FSContext, replyHandler: @escaping (FSGetXattrResult?, Error?) -> Void) {
+        getXattr(named:name,of:item) { data,error in
+            guard let data, error == nil else { return replyHandler(nil,error ?? posix(EIO)) }
+            replyHandler(FSGetXattrResult(xattrValue:data),nil)
+        }
+    }
+    func setXattr(named name: FSFileName, to data: Data?, on item: FSItem, policy: FSVolume.SetXattrPolicy, context: FSContext, replyHandler: @escaping (FSSetXattrResult?, Error?) -> Void) { replyHandler(nil,posix(EROFS)) }
+    func listXattrs(of item: FSItem, context: FSContext, replyHandler: @escaping (FSListXattrsResult?, Error?) -> Void) { replyHandler(FSListXattrsResult(xattrNames:xattrNames(for:item)),nil) }
 }

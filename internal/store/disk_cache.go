@@ -33,10 +33,13 @@ type diskEntry struct {
 	name       string
 	size, cost int64
 	pins       int
+	mapping    []byte
+	touched    time.Time
 }
 
 // DiskCache retains immutable byte entries as mmap files. Each directory
-// namespace has a single process owner. Live mmap leases pin eviction candidates.
+// namespace has a single process owner. Mappings live until eviction or close;
+// live leases pin eviction candidates. The OS manages resident mapped pages.
 // Whole-object reads (including mutable HEAD) and writes bypass the cache.
 type DiskCache struct {
 	Store
@@ -49,6 +52,7 @@ type DiskCache struct {
 	stop      chan struct{}
 	stopped   chan struct{}
 	items     map[string]*list.Element
+	pending   map[string]int64 // in-flight writes reserve bytes and entry slots
 	lru       *list.List
 	closed    bool
 	leases    int
@@ -78,7 +82,7 @@ func newDiskCache(s Store, dir, identity string, max int64, space func() (int64,
 		lock.Close()
 		return nil, fmt.Errorf("disk cache already in use; select a different --disk-cache-dir: %w", err)
 	}
-	c := &DiskCache{Store: s, dir: dir, lock: lock, max: max, limit: max, items: make(map[string]*list.Element), lru: list.New()}
+	c := &DiskCache{Store: s, dir: dir, lock: lock, max: max, limit: max, items: make(map[string]*list.Element), pending: make(map[string]int64), lru: list.New()}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		c.Close()
@@ -153,11 +157,12 @@ func diskCost(n int64) int64 { return (n + 4095) / 4096 * 4096 }
 
 // Caller holds mu (or is constructing the cache).
 func (c *DiskCache) makeRoom(cost int64, count int) bool {
-	for e := c.lru.Back(); (c.used+cost > c.limit || len(c.items)+count > 65536) && e != nil; {
+	for e := c.lru.Back(); (c.used+cost > c.limit || len(c.items)+len(c.pending)+count > 65536) && e != nil; {
 		prev := e.Prev()
 		v := e.Value.(*diskEntry)
 		if v.pins == 0 {
 			if err := os.Remove(filepath.Join(c.dir, v.name)); err == nil || errors.Is(err, os.ErrNotExist) {
+				v.unmap()
 				c.used -= v.cost
 				delete(c.items, v.name)
 				c.lru.Remove(e)
@@ -165,7 +170,7 @@ func (c *DiskCache) makeRoom(cost int64, count int) bool {
 		}
 		e = prev
 	}
-	return c.used+cost <= c.limit && len(c.items)+count <= 65536
+	return c.used+cost <= c.limit && len(c.items)+len(c.pending)+count <= 65536
 }
 
 func (c *DiskCache) mapped(name string, n int64) ([]byte, func(), bool) {
@@ -177,39 +182,57 @@ func (c *DiskCache) mapped(name string, n int64) ([]byte, func(), bool) {
 	if n >= 0 && v.size != n {
 		return nil, nil, false
 	}
-	f, err := os.Open(filepath.Join(c.dir, name))
-	if err != nil {
-		return nil, nil, false
-	}
-	info, err := f.Stat()
-	if err != nil || info.Size() != v.size {
+	if v.mapping == nil {
+		f, err := os.Open(filepath.Join(c.dir, name))
+		if err != nil {
+			return nil, nil, false
+		}
+		info, err := f.Stat()
+		if err != nil || info.Size() != v.size {
+			f.Close()
+			return nil, nil, false
+		}
+		mapping, err := unix.Mmap(int(f.Fd()), 0, int(v.size), unix.PROT_READ, unix.MAP_SHARED)
 		f.Close()
-		return nil, nil, false
+		if err != nil {
+			return nil, nil, false
+		}
+		v.mapping = mapping
 	}
-	b, err := unix.Mmap(int(f.Fd()), 0, int(v.size), unix.PROT_READ, unix.MAP_SHARED)
-	f.Close()
-	if err != nil {
-		return nil, nil, false
-	}
+	b := v.mapping
 	v.pins++
 	c.leases++
 	c.lru.MoveToFront(e)
+	// Persist an approximate restart LRU without a metadata write on every hit.
 	now := time.Now()
-	_ = os.Chtimes(filepath.Join(c.dir, name), now, now)
+	if now.Sub(v.touched) >= time.Minute {
+		_ = os.Chtimes(filepath.Join(c.dir, name), now, now)
+		v.touched = now
+	}
 	var once sync.Once
 	return b, func() {
 		once.Do(func() {
-			_ = unix.Munmap(b)
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			v.pins--
 			c.leases--
+			if c.closed && v.pins == 0 {
+				v.unmap()
+			}
 			c.makeRoom(0, 0)
-			if c.closed && c.leases == 0 {
+			if c.closed && c.leases == 0 && len(c.pending) == 0 {
 				c.unlock()
 			}
 		})
 	}, true
+}
+
+// Called with the cache lock held, and only after all borrowers have released.
+func (v *diskEntry) unmap() {
+	if v.mapping != nil {
+		_ = unix.Munmap(v.mapping)
+		v.mapping = nil
+	}
 }
 
 func (c *DiskCache) Acquire(ctx context.Context, key string, off, n int64) ([]byte, func(), error) {
@@ -271,7 +294,7 @@ func (c *DiskCache) load(ctx context.Context, name string, n int64, fn func() ([
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
+	if c.closed || c.pending[name] != 0 {
 		return b, noop, false, nil
 	}
 	if data, release, ok := c.mapped(name, n); ok {
@@ -286,6 +309,7 @@ func (c *DiskCache) load(ctx context.Context, name string, n int64, fn func() ([
 		if err := os.Remove(filepath.Join(c.dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return b, noop, false, nil
 		}
+		v.unmap()
 		c.used -= v.cost
 		delete(c.items, name)
 		c.lru.Remove(e)
@@ -295,26 +319,60 @@ func (c *DiskCache) load(ctx context.Context, name string, n int64, fn func() ([
 	if !c.makeRoom(cost, 1) {
 		return b, noop, false, nil
 	}
-	f, err := os.CreateTemp(c.dir, ".range-")
-	if err != nil {
-		return b, noop, false, nil
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
-	_, err = f.Write(b)
-	closeErr := f.Close()
-	if err != nil || closeErr != nil {
+	// Reserve before dropping the lock: temporary files count against the same
+	// byte/entry budget as published files. Different keys can write in parallel;
+	// another reader of this key may use its decoded bytes without another write.
+	c.pending[name] = cost
+	c.used += cost
+	c.mu.Unlock()
+	tmp, mapping, err := writeCacheFile(c.dir, b)
+	c.mu.Lock()
+	delete(c.pending, name)
+	published := false
+	defer func() {
+		if !published {
+			if mapping != nil {
+				_ = unix.Munmap(mapping)
+			}
+			if tmp != "" {
+				_ = os.Remove(tmp)
+			}
+			c.used -= cost
+		}
+		c.makeRoom(0, 0)
+		if c.closed && c.leases == 0 && len(c.pending) == 0 {
+			c.unlock()
+		}
+	}()
+	if err != nil || c.closed || ctx.Err() != nil {
 		return b, noop, false, nil
 	}
 	if err = os.Rename(tmp, filepath.Join(c.dir, name)); err != nil {
 		return b, noop, false, nil
 	}
-	c.items[name] = c.lru.PushFront(&diskEntry{name: name, size: n, cost: cost})
-	c.used += cost
+	published = true
+	// Its write already set mtime; no extra Chtimes is needed on the first hit.
+	c.items[name] = c.lru.PushFront(&diskEntry{name: name, size: n, cost: cost, mapping: mapping, touched: time.Now()})
 	if data, release, ok := c.mapped(name, n); ok {
 		return data, release, true, nil
 	}
 	return b, noop, false, nil
+}
+
+// The caller reserves budget and holds the owner lock until it removes or
+// publishes this temporary file. No cache mutex is held during the write.
+func writeCacheFile(dir string, b []byte) (string, []byte, error) {
+	f, err := os.CreateTemp(dir, ".range-")
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err = f.Write(b); err != nil {
+		_ = f.Close()
+		return f.Name(), nil, err
+	}
+	// Reuse the write descriptor instead of reopening and restatting the file.
+	mapping, _ := unix.Mmap(int(f.Fd()), 0, len(b), unix.PROT_READ, unix.MAP_SHARED)
+	return f.Name(), mapping, f.Close()
 }
 
 // Get preserves Store ownership semantics. Lease-aware readers call Acquire to
@@ -343,7 +401,13 @@ func (c *DiskCache) Close() error {
 		close(c.stop)
 	}
 	c.closed = true
-	if c.leases == 0 {
+	for _, e := range c.items {
+		v := e.Value.(*diskEntry)
+		if v.pins == 0 {
+			v.unmap()
+		}
+	}
+	if c.leases == 0 && len(c.pending) == 0 {
 		c.unlock()
 	}
 	stopped := c.stopped
@@ -404,7 +468,13 @@ func (c *DiskCache) refreshLimit() {
 		c.limit = 0
 		return
 	}
-	c.limit = effectiveDiskLimit(c.max, c.used, total, available)
+	// Reserved writes may not yet occupy disk space. Counting them as already
+	// reclaimable would let concurrent insertions encroach on the free reserve.
+	var pending int64
+	for _, cost := range c.pending {
+		pending += cost
+	}
+	c.limit = effectiveDiskLimit(c.max, c.used-pending, total, available)
 }
 
 // LoadMapped also reports whether the result is backed by a pinned disk mapping.

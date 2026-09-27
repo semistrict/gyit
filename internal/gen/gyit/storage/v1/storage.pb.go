@@ -1713,6 +1713,129 @@ func (x *DirectBlobStaged) GetChunk() *ChunkRecord {
 	return nil
 }
 
+// GitDirectory exposes immutable native Git files over the object-store API.
+// Packed object bytes can reference the archive already retained by import.
+type GitDirectory struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Files         []*GitFile             `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitDirectory) Reset() {
+	*x = GitDirectory{}
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitDirectory) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitDirectory) ProtoMessage() {}
+
+func (x *GitDirectory) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitDirectory.ProtoReflect.Descriptor instead.
+func (*GitDirectory) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *GitDirectory) GetFiles() []*GitFile {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+type GitFile struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Size  int64                  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	// Small files are inline; large files use numbered immutable segments.
+	InlineData    []byte `protobuf:"bytes,3,opt,name=inline_data,json=inlineData,proto3" json:"inline_data,omitempty"`
+	SegmentPrefix string `protobuf:"bytes,4,opt,name=segment_prefix,json=segmentPrefix,proto3" json:"segment_prefix,omitempty"`
+	SegmentSize   int64  `protobuf:"varint,5,opt,name=segment_size,json=segmentSize,proto3" json:"segment_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitFile) Reset() {
+	*x = GitFile{}
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitFile) ProtoMessage() {}
+
+func (x *GitFile) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitFile.ProtoReflect.Descriptor instead.
+func (*GitFile) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GitFile) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GitFile) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *GitFile) GetInlineData() []byte {
+	if x != nil {
+		return x.InlineData
+	}
+	return nil
+}
+
+func (x *GitFile) GetSegmentPrefix() string {
+	if x != nil {
+		return x.SegmentPrefix
+	}
+	return ""
+}
+
+func (x *GitFile) GetSegmentSize() int64 {
+	if x != nil {
+		return x.SegmentSize
+	}
+	return 0
+}
+
 var File_gyit_storage_v1_storage_proto protoreflect.FileDescriptor
 
 const file_gyit_storage_v1_storage_proto_rawDesc = "" +
@@ -1842,7 +1965,16 @@ const file_gyit_storage_v1_storage_proto_rawDesc = "" +
 	"\vsize_record\x18\x01 \x01(\bR\n" +
 	"sizeRecord\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x04R\x04size\x122\n" +
-	"\x05chunk\x18\x03 \x01(\v2\x1c.gyit.storage.v1.ChunkRecordR\x05chunk*m\n" +
+	"\x05chunk\x18\x03 \x01(\v2\x1c.gyit.storage.v1.ChunkRecordR\x05chunk\">\n" +
+	"\fGitDirectory\x12.\n" +
+	"\x05files\x18\x01 \x03(\v2\x18.gyit.storage.v1.GitFileR\x05files\"\x9c\x01\n" +
+	"\aGitFile\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x1f\n" +
+	"\vinline_data\x18\x03 \x01(\fR\n" +
+	"inlineData\x12%\n" +
+	"\x0esegment_prefix\x18\x04 \x01(\tR\rsegmentPrefix\x12!\n" +
+	"\fsegment_size\x18\x05 \x01(\x03R\vsegmentSize*m\n" +
 	"\n" +
 	"ObjectKind\x12\x1b\n" +
 	"\x17OBJECT_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -1863,7 +1995,7 @@ func file_gyit_storage_v1_storage_proto_rawDescGZIP() []byte {
 }
 
 var file_gyit_storage_v1_storage_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gyit_storage_v1_storage_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_gyit_storage_v1_storage_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_gyit_storage_v1_storage_proto_goTypes = []any{
 	(ObjectKind)(0),          // 0: gyit.storage.v1.ObjectKind
 	(*Manifest)(nil),         // 1: gyit.storage.v1.Manifest
@@ -1891,6 +2023,8 @@ var file_gyit_storage_v1_storage_proto_goTypes = []any{
 	(*DirectBlobPart)(nil),   // 23: gyit.storage.v1.DirectBlobPart
 	(*DirectBlobChild)(nil),  // 24: gyit.storage.v1.DirectBlobChild
 	(*DirectBlobStaged)(nil), // 25: gyit.storage.v1.DirectBlobStaged
+	(*GitDirectory)(nil),     // 26: gyit.storage.v1.GitDirectory
+	(*GitFile)(nil),          // 27: gyit.storage.v1.GitFile
 }
 var file_gyit_storage_v1_storage_proto_depIdxs = []int32{
 	8,  // 0: gyit.storage.v1.Manifest.root_page:type_name -> gyit.storage.v1.PageReference
@@ -1915,11 +2049,12 @@ var file_gyit_storage_v1_storage_proto_depIdxs = []int32{
 	18, // 19: gyit.storage.v1.DirectBlobPart.chunk:type_name -> gyit.storage.v1.ChunkRecord
 	8,  // 20: gyit.storage.v1.DirectBlobChild.page:type_name -> gyit.storage.v1.PageReference
 	18, // 21: gyit.storage.v1.DirectBlobStaged.chunk:type_name -> gyit.storage.v1.ChunkRecord
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	27, // 22: gyit.storage.v1.GitDirectory.files:type_name -> gyit.storage.v1.GitFile
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_gyit_storage_v1_storage_proto_init() }
@@ -1933,7 +2068,7 @@ func file_gyit_storage_v1_storage_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gyit_storage_v1_storage_proto_rawDesc), len(file_gyit_storage_v1_storage_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

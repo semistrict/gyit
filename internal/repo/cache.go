@@ -27,6 +27,16 @@ func newCache(max int) *cache {
 	return &cache{max: max, items: make(map[string]*list.Element), lru: list.New(), slots: make(chan struct{}, 8)}
 }
 
+// borrow permits wire readers to inspect a cached page without copying it.
+// The caller must release before returning any view into the page's bytes.
+func (c *cache) borrow(ctx context.Context, key string, fn func() ([]byte, error)) ([]byte, func(), error) {
+	if c.disk != nil {
+		return c.disk.Load(ctx, key, func() ([]byte, error) { return c.load(ctx, key, fn) })
+	}
+	b, err := c.load(ctx, key, fn)
+	return b, func() {}, err
+}
+
 func (c *cache) get(key string) ([]byte, bool) {
 	if c.disk != nil {
 		b, release, err := c.disk.Load(context.Background(), key, func() ([]byte, error) { return nil, store.ErrNotFound })

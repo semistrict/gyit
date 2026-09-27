@@ -8,6 +8,7 @@ package main
 #include <stdlib.h>
 typedef struct {
  uint64_t inode;
+ uint64_t parent_inode;
  int64_t size;
  uint32_t mode;
  char *name;
@@ -21,6 +22,7 @@ import (
 	"gyit/internal/macfs"
 	"gyit/internal/repo"
 	"io"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -116,7 +118,14 @@ func GyitLookup(id C.uint64_t, path *C.char, out *C.GyitEntry) C.int {
 	if err != nil {
 		return errorCode(err)
 	}
-	*out = C.GyitEntry{inode: C.uint64_t(macfs.Inode(p)), size: C.int64_t(e.Size), mode: C.uint32_t(e.Mode)}
+	parent := uint64(2)
+	if slash := strings.LastIndexByte(p, '/'); slash >= 0 {
+		parent = macfs.Inode(p[:slash])
+	}
+	if p == "" {
+		parent = 1
+	}
+	*out = C.GyitEntry{parent_inode: C.uint64_t(parent), inode: C.uint64_t(macfs.Inode(p)), size: C.int64_t(e.Size), mode: C.uint32_t(e.Mode)}
 	return 0
 }
 
@@ -153,12 +162,16 @@ func GyitList(id C.uint64_t, path, after *C.char, out **C.GyitEntry, count *C.in
 		return C.int(syscall.ENOMEM)
 	}
 	array := unsafe.Slice((*C.GyitEntry)(ptr), len(entries))
+	parent := macfs.Inode(p)
+	if p == "" {
+		parent = 2
+	}
 	for i, e := range entries {
 		child := e.Name
 		if p != "" {
 			child = p + "/" + child
 		}
-		array[i] = C.GyitEntry{inode: C.uint64_t(macfs.Inode(child)), size: C.int64_t(e.Size), mode: C.uint32_t(e.Mode), name: C.CString(e.Name)}
+		array[i] = C.GyitEntry{parent_inode: C.uint64_t(parent), inode: C.uint64_t(macfs.Inode(child)), size: C.int64_t(e.Size), mode: C.uint32_t(e.Mode), name: C.CString(e.Name)}
 	}
 	*out = (*C.GyitEntry)(ptr)
 	*count = C.int(len(entries))

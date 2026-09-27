@@ -1,0 +1,22 @@
+# Boot fixture only. The direct harness attaches its own Virtio devices after
+# copying this VM's stopped disk; no host directory sharing or FSKit is used.
+minimumLimaVersion: 2.0.0
+base: template:_images/ubuntu-24.04
+vmType: vz
+arch: aarch64
+cpus: 4
+memory: 8GiB
+disk: 32GiB
+mounts: []
+containerd:
+  user: false
+  system: false
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eu
+      if ! command -v git >/dev/null || ! command -v python3 >/dev/null; then
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y git python3
+      fi

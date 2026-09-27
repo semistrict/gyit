@@ -17,6 +17,8 @@ import (
 	"gyit/internal/store"
 )
 
+const repositoryDirectory = "repositories-git-v1"
+
 func (f *FS) git(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	env := []string{}
@@ -119,7 +121,7 @@ func (f *FS) prepare(ctx context.Context, t Target, progress func(string)) (*rep
 	if err != nil {
 		return nil, nil, err
 	}
-	final := filepath.Join(f.opts.DataDir, "repositories-v1", storeID(t, sha))
+	final := filepath.Join(f.opts.DataDir, repositoryDirectory, storeID(t, sha))
 	if _, err = os.Stat(filepath.Join(final, "HEAD")); err == nil {
 		progress("Opening prepared snapshot…")
 		return f.open(ctx, final)
@@ -136,7 +138,7 @@ func (f *FS) prepare(ctx context.Context, t Target, progress func(string)) (*rep
 	if out, err := f.git(ctx, source, "init", "--bare", "--quiet").CombinedOutput(); err != nil {
 		return nil, nil, fmt.Errorf("initialize snapshot: %w: %s", err, out)
 	}
-	cmd := f.git(ctx, source, "fetch", "--tags", "--force", "--progress", remote, sha, "+refs/heads/*:refs/heads/*")
+	cmd := f.git(ctx, source, "fetch", "--keep", "--tags", "--force", "--progress", remote, sha, "+refs/heads/*:refs/heads/*")
 	cmd.Stderr = &progressWriter{update: progress}
 	if err = cmd.Run(); err != nil {
 		return nil, nil, fmt.Errorf("fetch snapshot: %w", err)
@@ -158,11 +160,15 @@ func (f *FS) prepare(ctx context.Context, t Target, progress func(string)) (*rep
 	if err != nil {
 		return nil, nil, err
 	}
-	_, err = repo.Import(ctx, backend, repo.ImportOptions{Repo: source, TempDir: staging, Progress: func(s repo.Stats) {
+	stats, err := repo.Import(ctx, backend, repo.ImportOptions{Repo: source, TempDir: staging, Progress: func(s repo.Stats) {
 		progress(fmt.Sprintf("Preparing local repository data…\n%d objects, %d MiB processed, %d MiB stored", s.Objects, s.Bytes>>20, s.UploadedBytes>>20))
 	}})
 	if err != nil {
 		return nil, nil, fmt.Errorf("prepare snapshot: %w", err)
+	}
+	progress("Preparing native Git metadata…")
+	if err = f.prepareGitDirectory(ctx, source, backend, stats); err != nil {
+		return nil, nil, err
 	}
 	if err = os.MkdirAll(filepath.Dir(final), 0700); err != nil {
 		return nil, nil, err

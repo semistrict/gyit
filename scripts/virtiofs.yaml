@@ -1,0 +1,31 @@
+# VZ/virtio-fs scan fixture. Both shares are read-only. The normal checkout
+# must match the revision selected beneath /Volumes/gyit.
+minimumLimaVersion: 2.0.0
+base: template:_images/ubuntu-24.04
+vmType: vz
+arch: aarch64
+cpus: 4
+memory: 8GiB
+disk: 32GiB
+mountType: virtiofs
+param:
+  checkout: ""
+mounts:
+  - location: /Volumes/gyit
+    mountPoint: /mnt/gyit
+    writable: false
+  - location: "{{.Param.checkout}}"
+    mountPoint: /mnt/checkout
+    writable: false
+containerd:
+  user: false
+  system: false
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eu
+      if ! command -v git >/dev/null || ! command -v python3 >/dev/null; then
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y git python3
+      fi
