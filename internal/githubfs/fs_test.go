@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func fixture(t *testing.T) (Options, string, string) {
@@ -111,6 +112,45 @@ func TestNoticeThenAtomicSnapshot(t *testing.T) {
 	entries, err = f.ReadDir(t.Context(), "acme/project", "", 128)
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("ready directory %v %v", entries, err)
+	}
+}
+
+func TestNoticeReadShowsCurrentProgressAndElapsedTime(t *testing.T) {
+	f, _, _, _ := openFixture(t)
+	f.workers <- struct{}{}
+	f.workers <- struct{}{}
+	defer func() { <-f.workers; <-f.workers }()
+	j, err := f.ensureJob(Target{Owner: "acme", Repository: "project"}, "acme/project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	j.noticeAfter = time.Now()
+	f.mu.Unlock()
+	first := read(t, f, "acme/project/NOTICE")
+	if !strings.Contains(first, "Elapsed: ") {
+		t.Fatalf("NOTICE lacks elapsed setup time: %q", first)
+	}
+	j.progress("Fetching history: 25%")
+	time.Sleep(time.Second)
+	second := read(t, f, "acme/project/NOTICE")
+	if len(first) != len(second) {
+		t.Fatalf("NOTICE changed size from %d to %d; mounted readers may show stale bytes", len(first), len(second))
+	}
+	if !strings.Contains(second, "Fetching history: 25%") || strings.Contains(second, "Queued for background setup") {
+		t.Fatalf("NOTICE did not update progress: %q", second)
+	}
+	if !strings.Contains(second, "Elapsed: 00:00:01") {
+		t.Fatalf("NOTICE did not update elapsed time: %q", second)
+	}
+	j.progress(strings.Repeat("fetching…", 200))
+	long := read(t, f, "acme/project/NOTICE")
+	if len(long) != len(first) || !utf8.ValidString(long) || !strings.Contains(long, "Elapsed: ") {
+		t.Fatalf("long progress produced an invalid NOTICE: %q", long)
+	}
+	e, err := f.Lookup(t.Context(), "acme/project/NOTICE")
+	if err != nil || e.Size != int64(len(long)) {
+		t.Fatalf("NOTICE size = %d, %v; want %d", e.Size, err, len(long))
 	}
 }
 func TestRevisionPathsAndReuse(t *testing.T) {

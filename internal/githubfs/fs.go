@@ -16,6 +16,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
 	"gyit/internal/control"
@@ -89,6 +90,8 @@ type job struct {
 	target      Target
 	display     string
 	notice      string
+	startedAt   time.Time
+	finishedAt  time.Time
 	snapshot    *repo.Snapshot
 	repository  *repo.Repository
 	done        chan struct{}
@@ -96,14 +99,48 @@ type job struct {
 	generation  uint64
 }
 
+// The kernel can retain NOTICE's size across opens even when its data is read
+// without caching. Keep the virtual file's length stable as progress changes.
+const noticeSize = 512
+
+func clippedNoticeText(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	s = s[:limit-3]
+	for !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s + "..."
+}
+
 func (j *job) status() (*repo.Snapshot, string, uint64) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	return j.snapshot, j.notice, j.generation
+	if j.snapshot != nil {
+		return j.snapshot, "", j.generation
+	}
+	end := time.Now()
+	if !j.finishedAt.IsZero() {
+		end = j.finishedAt
+	}
+	seconds := max(0, int64(end.Sub(j.startedAt)/time.Second))
+	header := "gyit: preparing github.com/" + clippedNoticeText(j.display, 160) + "\n\n"
+	progress := j.notice
+	footer := "\n\nThe complete repository will replace this NOTICE when ready."
+	if strings.HasSuffix(progress, "\nTouch NOTICE to retry.") {
+		progress = strings.TrimSuffix(progress, "\nTouch NOTICE to retry.")
+		footer = "\n\nTouch NOTICE to retry."
+	}
+	footer = fmt.Sprintf("\n\nElapsed: %02d:%02d:%02d%s", seconds/3600, seconds/60%60, seconds%60, footer)
+	progress = clippedNoticeText(progress, noticeSize-1-len(header)-len(footer))
+	notice := header + progress + footer
+	notice += strings.Repeat(" ", noticeSize-1-len(notice)) + "\n"
+	return nil, notice, j.generation
 }
 func (j *job) progress(s string) {
 	j.mu.Lock()
-	j.notice = "gyit: preparing github.com/" + j.display + "\n\n" + s + "\n\nThe complete repository will replace this NOTICE when ready.\n"
+	j.notice = s
 	j.mu.Unlock()
 }
 
@@ -186,6 +223,9 @@ func (f *FS) Close() error {
 // A quick import completes within the calling read. Slower imports expose
 // progress after one shared deadline, without delaying every subsequent read.
 func (f *FS) ensure(ctx context.Context, t Target, display string) (*job, error) {
+	if err := f.publicRepository(ctx, t); err != nil {
+		return nil, err
+	}
 	j, err := f.ensureJob(t, display)
 	if err != nil {
 		return nil, err
@@ -241,11 +281,20 @@ func (f *FS) ensureJob(t Target, display string) (*job, error) {
 func (f *FS) start(j *job) {
 	t := j.target
 	j.noticeAfter = time.Now().Add(10 * time.Second)
+	j.mu.Lock()
+	j.startedAt = time.Now()
+	j.finishedAt = time.Time{}
+	j.mu.Unlock()
 	done := j.done
 	f.wg.Add(1)
 	go func() {
 		defer f.wg.Done()
-		defer close(done)
+		defer func() {
+			j.mu.Lock()
+			j.finishedAt = time.Now()
+			j.mu.Unlock()
+			close(done)
+		}()
 		select {
 		case f.workers <- struct{}{}:
 			defer func() { <-f.workers }()
@@ -324,6 +373,9 @@ func (f *FS) Lookup(ctx context.Context, path string) (repo.Entry, error) {
 	// Finder and IDEs stat every child of an owner listing. Merely inspecting
 	// a repository directory must not import it; reading it or a child does.
 	if len(p) == 2 {
+		if err := f.publicRepository(ctx, t); err != nil {
+			return repo.Entry{}, err
+		}
 		return directory(p[1]), nil
 	}
 	j, err := f.ensure(ctx, t, strings.Join(p[:2], "/"))

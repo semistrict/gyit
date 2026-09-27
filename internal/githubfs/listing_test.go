@@ -2,13 +2,51 @@ package githubfs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 )
+
+func TestMissingPublicRepositoryIsNotMounted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/orgs/acme/repos" {
+			t.Errorf("unexpected API %s", r.URL)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"name":"existing","owner":{"login":"acme"}}, {"name":"private-repo","private":true,"owner":{"login":"acme"}}, {"name":"internal-repo","visibility":"internal","owner":{"login":"acme"}}]`))
+	}))
+	defer server.Close()
+	opts, _, _ := fixture(t)
+	opts.APIBase = server.URL
+	f, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, path := range []string{"acme/missing", "acme/missing@main", "acme/private-repo", "acme/internal-repo"} {
+		if _, err := f.Lookup(t.Context(), path); !errors.Is(err, syscall.ENOENT) {
+			t.Fatalf("Lookup(%q) = %v; want repository not found", path, err)
+		}
+		if _, err := f.ReadDir(t.Context(), path, "", 128); !errors.Is(err, syscall.ENOENT) {
+			t.Fatalf("ReadDir(%q) = %v; want repository not found", path, err)
+		}
+	}
+	if len(f.jobs) != 0 {
+		t.Fatal("missing repository started setup")
+	}
+	entries, err := f.ReadDir(t.Context(), "acme", "", 128)
+	if err != nil || len(entries) != 1 || entries[0].Name != "existing" {
+		t.Fatalf("public listing = %v, %v; want only existing", entries, err)
+	}
+	if _, err := f.Lookup(t.Context(), "acme/existing"); err != nil {
+		t.Fatalf("public repository missing: %v", err)
+	}
+}
 
 func TestOwnerListingPages(t *testing.T) {
 	var calls atomic.Int32

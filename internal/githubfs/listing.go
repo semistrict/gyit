@@ -19,8 +19,34 @@ type listing struct {
 	expires time.Time
 }
 type remoteRepository struct {
-	Name  string
-	Owner struct{ Login string }
+	Name       string
+	Private    bool
+	Visibility string
+	Owner      struct{ Login string }
+}
+
+// A repository name is a directory only when GitHub lists it as public.
+// Existing jobs remain available if a listing expires while a mount is active.
+func (f *FS) publicRepository(ctx context.Context, t Target) error {
+	if f.opts.APIBase == "" && f.opts.RemoteBase != "https://github.com" {
+		return nil
+	}
+	f.mu.Lock()
+	known := f.jobs[t.Key()] != nil
+	f.mu.Unlock()
+	if known {
+		return nil
+	}
+	names, err := f.listRepositories(ctx, t.Owner)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		if strings.EqualFold(name, t.Repository) {
+			return nil
+		}
+	}
+	return syscall.ENOENT
 }
 
 // Directory metadata is short-lived and bounded independently of file content.
@@ -74,7 +100,7 @@ func (f *FS) fetchRepositories(ctx context.Context, owner string) ([]string, err
 	}
 	names := map[string]bool{}
 	for _, r := range repos {
-		if strings.EqualFold(r.Owner.Login, owner) && validName(r.Name) {
+		if !r.Private && (r.Visibility == "" || r.Visibility == "public") && strings.EqualFold(r.Owner.Login, owner) && validName(r.Name) {
 			names[r.Name] = true
 		}
 	}

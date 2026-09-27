@@ -45,7 +45,7 @@ def main():
         (bundle/'Contents/MacOS').mkdir(parents=True, exist_ok=True)
     library=output/'libgyitfs.a'
     run('env','MACOSX_DEPLOYMENT_TARGET=26.0','CGO_CFLAGS=-mmacosx-version-min=26.0','CGO_LDFLAGS=-mmacosx-version-min=26.0','go','build','-buildmode=c-archive','-o',library,'./cmd/gyit-fskit')
-    base={'CFBundleVersion':'16','CFBundleShortVersionString':'0.1','LSMinimumSystemVersion':'26.0','CFBundleDevelopmentRegion':'en',
+    base={'CFBundleVersion':'17','CFBundleShortVersionString':'0.1','LSMinimumSystemVersion':'26.0','CFBundleDevelopmentRegion':'en',
           'CFBundleInfoDictionaryVersion':'6.0','CFBundleSupportedPlatforms':['MacOSX'],'DTPlatformName':'macosx'}
     app_info=base|{'CFBundleIdentifier':opt.bundle_id,'CFBundleName':'🍑gyit','CFBundleDisplayName':'🍑gyit','CFBundleIconFile':'gyit.icns',
                    'CFBundleExecutable':'gyit','CFBundlePackageType':'APPL'}
