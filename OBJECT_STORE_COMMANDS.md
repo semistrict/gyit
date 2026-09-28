@@ -1,5 +1,10 @@
 # Legacy object-store tools
 
+> Historical notes for the retired storage implementation. Its compatibility
+> readers, importer, and format-specific verification harnesses have been removed.
+> Current storage is documented in [OBJECT_STORE.md](OBJECT_STORE.md); current
+> checks are `go test ./...` and the progressive tests in `internal/repo/`.
+
 These development tools remain available for imported stores. Mounting now uses the GitHub namespace described in [README.md](README.md); historical store-mount commands below are not supported by the current CLI.
 
 # gyit
@@ -624,7 +629,7 @@ For mounted checks, build the same source normally on Linux and use the separate
 two-mount FUSE verifier. It checks nested directories, read-only behavior, stable
 inodes, pinned open handles, and isolated version switches, then removes its own
 mounts and processes. Instructions and explicit limits are in
-[scripts/VERIFY_LINUX.md](scripts/VERIFY_LINUX.md). These local-store results do
+the retired Linux verification notes. These local-store results do
 not establish remote S3 latency. A larger operation can exceed one second even
 when root navigation and version switching remain small metadata operations.
 

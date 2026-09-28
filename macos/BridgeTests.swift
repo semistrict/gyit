@@ -7,12 +7,12 @@ struct BridgeTests {
         guard CommandLine.arguments.count == 5 else { fatalError("usage: test REMOTE DATA CACHE SHA") }
         let v = try GyitVolume(data:CommandLine.arguments[2],cache:CommandLine.arguments[3],remote:CommandLine.arguments[1],budget:16<<20)
         precondition(v.root.attrs.mode == 0o555 && v.root.attrs.parentID == .parentOfRoot)
-        let path = Data("github.com/acme/project@\(CommandLine.arguments[4])".utf8)
+        let path = Data("github.com/acme/project".utf8)
         let root = try v.item(path)
         let inode = root.attrs.fileID
         var entries:UnsafeMutablePointer<GyitEntry>?; var count:Int32=0
         try checked(withPath(path) { p in withPath(Data()) { GyitList(v.handle,p,$0,&entries,&count) } })
-        precondition(count == 3)
+        precondition(count == 2)
         for i in 0..<Int(count) {
             precondition(String(cString:entries![i].name) != "NOTICE")
             precondition(FSItem.Identifier(entries![i].parent_inode) == root.attrs.fileID)
@@ -65,8 +65,38 @@ struct BridgeTests {
         precondition(n == 5 && buffer.prefix(5) == Data("from ".utf8))
         do { _ = try v.item(childPath(path,Data("NOTICE".utf8))); fatalError("setup NOTICE survived publication") } catch { precondition((error as NSError).code == Int(ENOENT)) }
         let link = try v.item(childPath(path,Data("link".utf8)))
-        v.readSymbolicLink(link) { name,error in precondition(error == nil && name?.data == Data("dir/hello".utf8)) }
+        let linkRead = DispatchSemaphore(value:0)
+        v.readSymbolicLink(link) { name,error in
+            precondition(error == nil && name?.data == Data("dir/hello".utf8))
+            linkRead.signal()
+        }
+        precondition(linkRead.wait(timeout:.now()+5) == .success, "symlink reply must complete")
+        let attributesRead = DispatchSemaphore(value:0)
+        v.getAttributes(FSItem.GetAttributesRequest(),of:file) { attributes,error in
+            precondition(error == nil && attributes?.size == 22)
+            attributesRead.signal()
+        }
+        precondition(attributesRead.wait(timeout:.now()+5) == .success, "attribute reply must complete")
         v.openItem(file,modes:.write) { error in precondition((error as NSError?)?.code == Int(EROFS)) }
-        print("native synchronous-setup bridge passed")
+        // Move the upstream branch, then update through the real protobuf socket.
+        let remote = URL(string:CommandLine.arguments[1])!.appendingPathComponent("acme/project.git")
+        let move = Process(); move.executableURL = URL(fileURLWithPath:"/usr/bin/git")
+        move.arguments = ["-C",remote.path,"update-ref","refs/heads/main","refs/heads/next"]
+        try move.run(); move.waitUntilExit(); precondition(move.terminationStatus == 0)
+        let refresh = Process(); refresh.executableURL = command.executableURL
+        refresh.currentDirectoryURL = probe; refresh.arguments = ["update"]
+        try refresh.run(); refresh.waitUntilExit(); precondition(refresh.terminationStatus == 0)
+        let changed = try v.item(file.path)
+        precondition(changed === file && changed.attrs.fileID == file.attrs.fileID)
+        precondition(changed.attrs.size == UInt64(Data("updated content has a different length\n".utf8).count), "cached attributes must refresh after update")
+        precondition(withPath(path, { GyitGeneration(v.handle,$0) }) == 3)
+        _ = try v.item(childPath(path,Data("added".utf8)))
+        let newLink = DispatchSemaphore(value:0)
+        v.readSymbolicLink(link) { name,error in
+            precondition(error == nil && name?.data == Data("added".utf8))
+            newLink.signal()
+        }
+        precondition(newLink.wait(timeout:.now()+5) == .success)
+        print("native progressive bridge and update passed")
     }
 }

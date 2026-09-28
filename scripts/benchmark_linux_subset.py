@@ -24,12 +24,8 @@ def main():
     parser.add_argument('--path', default='drivers/net', help='directory to sample; empty selects repository root')
     parser.add_argument('--versions', type=int, default=64)
     parser.add_argument('--timeout', type=int, default=60)
-    parser.add_argument('--baseline-workers', type=int, default=0, help='worker count for the baseline executable; 0 uses its default')
-    parser.add_argument('--workers', type=int, default=0, help='worker count for the updated executable; 0 uses its default')
     parser.add_argument('--expect-same-payloads', action='store_true', help='require byte-identical blob packs in both imports')
     args = parser.parse_args()
-    if args.workers < 0 or args.baseline_workers < 0:
-        parser.error('worker counts cannot be negative')
     source, output = args.source.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1',
@@ -95,9 +91,6 @@ def main():
             scratch = root / (label + '-scratch')
             scratch.mkdir()
             command = [str(executable), 'import', '--repo', str(sample), '--store', str(store), '--temp-dir', str(scratch)]
-            workers = args.baseline_workers if label == 'baseline' else args.workers
-            if workers:
-                command += ['--workers', str(workers)]
             peak = 0
             start = time.monotonic()
             with (output / (label + '.out')).open('wb') as out, (output / (label + '.err')).open('wb') as err:

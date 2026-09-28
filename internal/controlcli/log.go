@@ -19,7 +19,7 @@ func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	f := flag.NewFlagSet("log", flag.ContinueOnError)
 	f.SetOutput(stderr)
 	socket := f.String("socket", "", "mount control socket (default: discover from current directory)")
-	timeout := f.Duration("timeout", 35*time.Second, "maximum time for log output")
+	timeout := f.Duration("timeout", 5*time.Minute, "maximum time for log output (including cold history acquisition)")
 	oneline := f.Bool("oneline", false, "show abbreviated IDs and subjects")
 	follow := f.Bool("follow", false, "continue file history across renames")
 	firstParent := f.Bool("first-parent", false, "follow only the first parent at merges")
@@ -85,7 +85,7 @@ func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		}
 		converted[i] = []byte(p)
 	}
-	request := &pb.LogRequest{Revision: revision, MaxCount: uint32(count), FirstParent: *firstParent, Paths: converted, Follow: *follow, PathPrefix: location[0]}
+	request := &pb.LogRequest{Revision: revision, MaxCount: uint32(count), FirstParent: *firstParent, FullCommitIds: !*oneline, Paths: converted, Follow: *follow, PathPrefix: location[0]}
 	if possiblePath {
 		request.PossiblePath, request.Paths = converted[0], converted[1:]
 	}

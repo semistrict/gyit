@@ -1,62 +1,72 @@
 package fuse
 
 import (
- "encoding/binary"
- "syscall"
+	"encoding/binary"
+	"syscall"
 )
 
 // HandleFlat adapts VZ's flattened descriptor chain to ProtocolServer's iov ABI.
 // Input is a private copy, never mutable guest memory. Output is bounded by the
 // descriptor capacity supplied by VZ. No slice survives this synchronous call.
 func (ps *ProtocolServer) HandleFlat(in, out []byte) (int, Status) {
- replyError:=func(status Status)(int,Status) {
-  if len(in)<16 || len(out)<16 {return 0,EIO}
-  clear(out[:16]);binary.LittleEndian.PutUint32(out,16)
-  binary.LittleEndian.PutUint32(out[4:],uint32(-linuxErrno(syscall.Errno(status))))
-  copy(out[8:16],in[8:16]);return 16,OK
- }
- if len(in)<40 || int(binary.LittleEndian.Uint32(in))!=len(in) {return replyError(EINVAL)}
- h, _, fixed, payload, errno := parseRequest(in, &ps.kernelSettings)
- if errno != 0 {return replyError(errno)}
- if h == nil {return replyError(ENOSYS)}
- // READLINK has a variable result but no requested size in its input. Give
- // ProtocolServer the available payload space so it copies the returned link.
- if binary.LittleEndian.Uint32(in[4:])==_OP_READLINK {
-  if len(out)<16+fixed {return replyError(EIO)}
-  payload=len(out)-16-fixed
- }
- var iov [][]byte
- if !h.SuppressReply {
-  if len(out)<16+fixed+payload {return replyError(EIO)}
-  iov=append(iov,out[:16]);rest:=out[16:]
-  if fixed>0 {iov=append(iov,rest[:fixed]);rest=rest[fixed:]}
-  if payload>0 {iov=append(iov,rest[:payload])}
- }
- n,status:=ps.HandleRequest([][]byte{in},iov)
- if h.SuppressReply {return 0,status}
- if status!=OK {return replyError(status)}
- if n<16 || n>len(out) || int(binary.LittleEndian.Uint32(out))!=n {return replyError(EIO)}
- if n>=16 {
-  err:=int32(binary.LittleEndian.Uint32(out[4:8]))
-  if err<0 {binary.LittleEndian.PutUint32(out[4:8],uint32(-linuxErrno(syscall.Errno(-err))))}
- }
- return n,status
-}
-
-// Darwin syscall numbers differ from the Linux guest ABI.
-func linuxErrno(e syscall.Errno) int32 {
- switch e {
- case syscall.EAGAIN:return 11
- case syscall.EDEADLK:return 35
- case syscall.ENOTSUP:return 95
- case syscall.ENOSYS:return 38
- case syscall.ENODATA,syscall.ENOATTR:return 61
- case syscall.EOVERFLOW:return 75
- case syscall.ENAMETOOLONG:return 36
- case syscall.ENOTEMPTY:return 39
- case syscall.ELOOP:return 40
- case syscall.ETIMEDOUT:return 110
- case syscall.ECANCELED:return 125
- default:if e<=34 {return int32(e)};return 5
- }
+	replyError := func(status Status) (int, Status) {
+		if len(in) < 16 || len(out) < 16 {
+			return 0, EIO
+		}
+		clear(out[:16])
+		binary.LittleEndian.PutUint32(out, 16)
+		binary.LittleEndian.PutUint32(out[4:], uint32(-linuxErrno(syscall.Errno(status))))
+		copy(out[8:16], in[8:16])
+		return 16, OK
+	}
+	if len(in) < 40 || int(binary.LittleEndian.Uint32(in)) != len(in) {
+		return replyError(EINVAL)
+	}
+	h, _, fixed, payload, errno := parseRequest(in, &ps.kernelSettings)
+	if errno != 0 {
+		return replyError(errno)
+	}
+	if h == nil {
+		return replyError(ENOSYS)
+	}
+	// READLINK has a variable result but no requested size in its input. Give
+	// ProtocolServer the available payload space so it copies the returned link.
+	if binary.LittleEndian.Uint32(in[4:]) == _OP_READLINK {
+		if len(out) < 16+fixed {
+			return replyError(EIO)
+		}
+		payload = len(out) - 16 - fixed
+	}
+	var iov [][]byte
+	if !h.SuppressReply {
+		if len(out) < 16+fixed+payload {
+			return replyError(EIO)
+		}
+		iov = append(iov, out[:16])
+		rest := out[16:]
+		if fixed > 0 {
+			iov = append(iov, rest[:fixed])
+			rest = rest[fixed:]
+		}
+		if payload > 0 {
+			iov = append(iov, rest[:payload])
+		}
+	}
+	n, status := ps.HandleRequest([][]byte{in}, iov)
+	if h.SuppressReply {
+		return 0, status
+	}
+	if status != OK {
+		return replyError(status)
+	}
+	if n < 16 || n > len(out) || int(binary.LittleEndian.Uint32(out)) != n {
+		return replyError(EIO)
+	}
+	if n >= 16 {
+		err := int32(binary.LittleEndian.Uint32(out[4:8]))
+		if err < 0 {
+			binary.LittleEndian.PutUint32(out[4:8], uint32(-linuxErrno(syscall.Errno(-err))))
+		}
+	}
+	return n, status
 }

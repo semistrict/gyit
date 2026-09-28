@@ -31,7 +31,13 @@ func (r *Repository) View(ctx context.Context, current *Snapshot, opt ViewOption
 	if err != nil {
 		return err
 	}
-	r = r.withStore(viewStore{Store: r.store, head: head, token: token})
+	p, err := NewProgressive(ctx, viewStore{Store: r.store, head: head, token: token}, r.cache.disk, r.progressive.temp)
+	if err != nil {
+		return err
+	}
+	p.cache = r.cache
+	p.Demand, p.DemandCommits, p.ResolveRevision = r.progressive.Demand, r.progressive.DemandCommits, r.progressive.ResolveRevision
+	r = p.HistoryRepository()
 	switch opt.Command {
 	case "ls-tree", "ls-files", "cat-file", "grep":
 		return r.ViewObjects(ctx, current, opt, out)

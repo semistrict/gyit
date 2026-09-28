@@ -2,11 +2,7 @@ package repo
 
 import (
 	"context"
-	"encoding/hex"
-	"errors"
 	"fmt"
-	storagev1 "gyit/internal/gen/gyit/storage/v1"
-	"gyit/internal/store"
 	"strings"
 )
 
@@ -43,9 +39,8 @@ type lineOrigin struct {
 }
 type lineLink struct{ current, final int }
 type blameTask struct {
-	position uint64
-	sha      string
-	lines    []lineLink
+	sha   string
+	lines []lineLink
 }
 
 func (s *Snapshot) atCommit(ctx context.Context, sha string) (*Snapshot, error) {
@@ -56,7 +51,7 @@ func (s *Snapshot) atCommit(ctx context.Context, sha string) (*Snapshot, error) 
 	if o.Kind != "commit" {
 		return nil, fmt.Errorf("history target is not a commit")
 	}
-	return &Snapshot{idx: s.idx, SHA: sha, Tree: o.Tree}, nil
+	return &Snapshot{progressive: s.progressive, idx: s.idx, SHA: sha, Tree: o.Tree}, nil
 }
 
 // Blame passes surviving lines to matching parent lines, following all parents
@@ -107,14 +102,7 @@ func (s *Snapshot) Blame(ctx context.Context, opts BlameOptions, emit func(Blame
 	for i := start - 1; i < end; i++ {
 		links = append(links, lineLink{i, i})
 	}
-	var position historyPosition
-	cursor := &historyCursor{idx: s.history}
-	if s.history != nil && s.history.root != (pageRef{}) {
-		if err := s.history.get(ctx, "g/"+s.SHA, &position); err != nil && !errors.Is(err, store.ErrNotFound) {
-			return err
-		}
-	}
-	tasks := []blameTask{{sha: s.SHA, lines: links, position: uint64(position)}}
+	tasks := []blameTask{{sha: s.SHA, lines: links}}
 	visited := 0
 	for len(tasks) > 0 {
 		if err := ctx.Err(); err != nil {
@@ -123,32 +111,13 @@ func (s *Snapshot) Blame(ctx context.Context, opts BlameOptions, emit func(Blame
 		task := tasks[len(tasks)-1]
 		tasks[len(tasks)-1] = blameTask{}
 		tasks = tasks[:len(tasks)-1]
-		var node *storagev1.HistoryCommit
-		var cur *Snapshot
+		cur, err := s.atCommit(ctx, task.sha)
+		if err != nil {
+			return err
+		}
 		var p parents
-		var parentPositions []uint64
-		if task.position != 0 {
-			node, err = cursor.get(ctx, task.position)
-			if err != nil {
-				return err
-			}
-			if len(node.Parents) > 0 && !mayChangePath(node.ChangedPaths, opts.Path) {
-				// A Bloom negative proves exact equality with the first parent.
-				tasks = append(tasks, blameTask{position: node.Parents[0], lines: task.lines})
-				continue
-			}
-			task.sha = hex.EncodeToString(node.Oid)
-			cur = &Snapshot{idx: s.idx, SHA: task.sha, Tree: hex.EncodeToString(node.Tree)}
-			parentPositions = node.Parents
-			p.Parents = make([]string, len(parentPositions))
-		} else {
-			cur, err = s.atCommit(ctx, task.sha)
-			if err != nil {
-				return err
-			}
-			if err = s.idx.get(ctx, "p/"+task.sha, &p); err != nil {
-				return err
-			}
+		if err = s.idx.get(ctx, "p/"+task.sha, &p); err != nil {
+			return err
 		}
 		visited++
 		if visited > maxBlameCommits {
@@ -168,25 +137,13 @@ func (s *Snapshot) Blame(ctx context.Context, opts BlameOptions, emit func(Blame
 		remaining := task.lines
 		var currentLines []string
 		previous := ""
-		for parentIndex, sha := range next {
+		for _, sha := range next {
 			if len(remaining) == 0 {
 				break
 			}
-			var parent *Snapshot
-			var parentPosition uint64
-			if node != nil {
-				parentPosition = parentPositions[parentIndex]
-				n, e := cursor.get(ctx, parentPosition)
-				if e != nil {
-					return e
-				}
-				sha = hex.EncodeToString(n.Oid)
-				parent = &Snapshot{idx: s.idx, SHA: sha, Tree: hex.EncodeToString(n.Tree)}
-			} else {
-				parent, err = s.atCommit(ctx, sha)
-				if err != nil {
-					return err
-				}
+			parent, err := s.atCommit(ctx, sha)
+			if err != nil {
+				return err
 			}
 			pe, err := parent.Resolve(ctx, opts.Path)
 			if IsNotFound(err) {
@@ -262,7 +219,7 @@ func (s *Snapshot) Blame(ctx context.Context, opts BlameOptions, emit func(Blame
 				if len(tasks) >= maxBlameTasks {
 					return fmt.Errorf("blame exceeds bounded history frontier")
 				}
-				tasks = append(tasks, blameTask{sha: sha, lines: transfer, position: parentPosition})
+				tasks = append(tasks, blameTask{sha: sha, lines: transfer})
 			}
 		}
 		for _, link := range remaining {

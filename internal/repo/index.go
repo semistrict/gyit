@@ -10,9 +10,10 @@ import (
 	"iter"
 	"strings"
 
-	bolt "go.etcd.io/bbolt"
 	"gyit/internal/spill"
 	"gyit/internal/store"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 const fanout = 128
@@ -38,13 +39,12 @@ type page struct {
 }
 
 type index struct {
-	globalSizes   *globalSizeSlot
-	globalSizeRef globalSizeRef
-	store         store.Store
-	cache         *cache
-	root          pageRef
-	// Direct lookup root belongs to the same immutable snapshot publication.
-	blobRoot pageRef
+	// Progressive object indexes store uncompressed pages in bounded containers.
+	containers  bool
+	progressive *Progressive
+	store       store.Store
+	cache       *cache
+	root        pageRef
 }
 
 func (idx *index) pageBytes(ctx context.Context, ref pageRef) ([]byte, error) {
@@ -63,6 +63,26 @@ func (idx *index) borrowPage(ctx context.Context, ref pageRef) ([]byte, func(), 
 	hash, err := hex.DecodeString(ref.Hash)
 	if err != nil || len(hash) != sha256.Size {
 		return nil, func() {}, fmt.Errorf("invalid index page hash")
+	}
+	if idx.containers {
+		raw, release, err := idx.cache.borrow(ctx, "index-container/"+ref.Pack, func() ([]byte, error) {
+			b, _, err := idx.store.Get(ctx, ref.Pack, 0, -1)
+			if err == nil && len(b) > indexPackSize {
+				return nil, fmt.Errorf("index container exceeds size bound")
+			}
+			return b, err
+		})
+		if err != nil {
+			return nil, release, err
+		}
+		if ref.Offset+ref.Length > int64(len(raw)) {
+			return nil, release, fmt.Errorf("index container range")
+		}
+		page := raw[ref.Offset : ref.Offset+ref.Length]
+		if fmt.Sprintf("%x", sha256.Sum256(page)) != ref.Hash {
+			return nil, release, fmt.Errorf("index checksum mismatch")
+		}
+		return page, release, nil
 	}
 	return idx.cache.borrow(ctx, "index/"+ref.Hash, func() ([]byte, error) {
 		b, _, err := idx.store.Get(ctx, ref.Pack, ref.Offset, ref.Length)
@@ -83,6 +103,9 @@ func (idx *index) page(ctx context.Context, ref pageRef) (page, error) {
 }
 
 func (idx *index) get(ctx context.Context, key string, out any) error {
+	if idx.progressive != nil {
+		return idx.progressive.historyRecord(ctx, key, out)
+	}
 	id := idx.root
 	for id != (pageRef{}) {
 		b, release, err := idx.borrowPage(ctx, id)
@@ -103,6 +126,9 @@ func (idx *index) get(ctx context.Context, key string, out any) error {
 
 // scan visits only pages intersecting a prefix, with a bounded output batch.
 func (idx *index) scan(ctx context.Context, prefix, after string, limit int) ([]item, error) {
+	if idx.progressive != nil {
+		return idx.progressive.historyScan(ctx, prefix, after, limit)
+	}
 	var result []item
 	var visit func(pageRef) error
 	start := prefix
@@ -152,10 +178,12 @@ func (idx *index) scan(ctx context.Context, prefix, after string, limit int) ([]
 // indexWriter batches durable writes without widening the reader's fetch unit.
 // References are assigned before upload; update must flush before publishing its root.
 type indexWriter struct {
-	ctx    context.Context
-	store  store.Store
-	prefix string
-	number int
+	cache     *cache
+	packLimit int
+	ctx       context.Context
+	store     store.Store
+	prefix    string
+	number    int
 	// step partitions directory pack numbers among workers sharing a prefix.
 	// Zero retains the normal consecutive numbering.
 	step int
@@ -169,6 +197,13 @@ func (w *indexWriter) flush() error {
 	}
 	if err := w.store.Put(w.ctx, w.key(), w.data, ""); err != nil {
 		return err
+	}
+	if w.cache != nil {
+		data := w.data
+		if w.cache.disk == nil {
+			data = append([]byte(nil), data...)
+		}
+		w.cache.put("index-container/"+w.key(), data)
 	}
 	w.number += max(1, w.step)
 	w.data = w.data[:0]
@@ -194,10 +229,14 @@ func (w *indexWriter) save(p page) (edge, error) {
 }
 
 func (w *indexWriter) saveBytes(b []byte) (pageRef, error) {
-	if len(b) > indexPackSize {
+	limit := w.packLimit
+	if limit == 0 {
+		limit = indexPackSize
+	}
+	if len(b) > limit {
 		return pageRef{}, fmt.Errorf("index page exceeds pack size")
 	}
-	if len(w.data)+len(b) > indexPackSize {
+	if len(w.data)+len(b) > limit {
 		if err := w.flush(); err != nil {
 			return pageRef{}, err
 		}
@@ -361,6 +400,9 @@ func (idx *index) updateChanges(ctx context.Context, c *changes) (root pageRef, 
 		return idx.root, nil
 	}
 	w := &indexWriter{ctx: ctx, store: idx.store, prefix: rand.Text(), data: make([]byte, 0, indexPackSize)}
+	if idx.containers {
+		w.cache = idx.cache
+	}
 	defer func() {
 		if err == nil {
 			err = w.flush()

@@ -1,231 +1,137 @@
-// Package repo imports immutable Git objects and exposes lazy, pinned snapshots.
+// Package repo stores immutable Git packs and exposes lazy, pinned snapshots.
 package repo
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"strings"
-	"sync"
-
 	"gyit/internal/store"
+	"os"
+	"strings"
 )
 
 const ChunkSize = 1 << 20
-const PackSize = 64 << 20
 const DefaultCacheBytes = 32 << 20
 
+// manifest is a query view, not a persisted storage format.
 type manifest struct {
-	Version        int
-	Format         string
-	Root           pageRef
-	Tips           []string
-	Refs           pageRef
-	RevisionGraph  bool
-	RefsHash       string
-	CommitMetadata bool
-	History        pageRef
-	HistoryCount   uint64
-	Blobs          pageRef
+	Format        string
+	Refs          pageRef
+	RevisionGraph bool
 }
 type reference struct{ Commit, ObjectID, SymbolicTarget string }
 type parents struct{ Parents []string }
-
 type object struct {
-	Kind      string
-	Size      int64
-	Tree      string
-	Directory pageRef
-}
-type anchorRecord struct{ Candidates []chunkBase }
-
-type chunkBase struct {
-	Base           *chunkBase
-	Pack           string
-	Offset, Length int64
-	Hash           string
-}
-
-type chunk struct {
-	ArchiveRecipe string
-	Base          *chunkBase
-	Pack          string
-	Offset        int64
-	Length        int64
-	Hash          string
-}
-
-type Entry struct {
-	Name string
-	OID  string
-	Mode uint32
+	Kind string
 	Size int64
-	// RawMode preserves historical tree permissions for raw object reads.
-	// Zero means the original mode was already canonical.
-	RawMode uint32
+	Tree string
 }
-
+type Entry struct {
+	Name, OID string
+	Mode      uint32
+	Size      int64
+	RawMode   uint32
+	// Immutable prepared metadata carried with a directory entry. Readers can
+	// descend without looking its tree ID up in the global object index again.
+	directory pageRef
+}
 type Repository struct {
-	readerOwner          *Repository
-	borrowedDisk         bool
-	globalMu             sync.Mutex
-	globalSizes          *globalSizeSlot
-	configuredCacheBytes int
-	store                store.Store
-	cache                *cache
+	progressive  *Progressive
+	store        store.Store
+	cache        *cache
+	refresh      bool
+	borrowedDisk bool
+}
+type Snapshot struct {
+	progressive                   *Progressive
+	idx                           *index
+	SHA, Tree, Branch, DetachedAt string
 }
 
 func New(s store.Store, cacheBytes int) (*Repository, error) {
 	if cacheBytes < 0 {
 		return nil, fmt.Errorf("cache size cannot be negative")
 	}
-	return &Repository{store: s, cache: newCache(cacheBytes), configuredCacheBytes: cacheBytes}, nil
-}
-
-// withStore changes the metadata view without allocating another cache or
-// global-size slot. The owner also serializes first use across concurrent views.
-func (r *Repository) withStore(s store.Store) *Repository {
-	owner := r
-	if r.readerOwner != nil {
-		owner = r.readerOwner
-	}
-	return &Repository{store: s, cache: r.cache,
-		configuredCacheBytes: r.configuredCacheBytes, readerOwner: owner}
-}
-
-func readHead(ctx context.Context, s store.Store) (manifest, string, error) {
-	b, token, err := s.Get(ctx, "HEAD", 0, -1)
-	var m manifest
+	p, err := NewProgressive(context.Background(), s, nil, os.TempDir())
 	if err != nil {
-		return m, "", err
+		return nil, err
 	}
-	if err = unmarshal(b, &m); err != nil {
-		return m, "", err
-	}
-	if !supportedFormat(m.Version) || (m.Format != "sha1" && m.Format != "sha256") || m.Root == (pageRef{}) {
-		return m, "", fmt.Errorf("unsupported or invalid repository manifest")
-	}
-	return m, token, nil
+	p.cache = newCache(cacheBytes)
+	r := p.HistoryRepository()
+	r.refresh = true
+	return r, nil
 }
-
-type Snapshot struct {
-	globalSizes   *globalSizeSlot
-	globalSizeRef globalSizeRef
-	idx           *index
-	history       *index
-	SHA, Tree     string
-	// Checkout identity is immutable and travels with the selected snapshot.
-	Branch, DetachedAt string
+func NewDisk(s store.Store, dir, identity string, budget int64) (*Repository, error) {
+	disk, err := store.NewDiskCache(nil, dir, identity, budget)
+	if err != nil {
+		return nil, err
+	}
+	r, err := NewSharedDisk(s, disk)
+	if err != nil {
+		disk.Close()
+		return nil, err
+	}
+	r.borrowedDisk = false
+	return r, nil
 }
-
+func NewSharedDisk(s store.Store, disk *store.DiskCache) (*Repository, error) {
+	p, err := NewProgressive(context.Background(), s, disk, os.TempDir())
+	if err != nil {
+		return nil, err
+	}
+	r := p.HistoryRepository()
+	r.refresh = true
+	return r, nil
+}
+func (r *Repository) Close() error {
+	if r.cache.disk != nil && !r.borrowedDisk {
+		return r.cache.disk.Close()
+	}
+	return nil
+}
 func (r *Repository) Open(ctx context.Context, sha string) (*Snapshot, error) {
-	m, _, err := readHead(ctx, r.store)
-	if err != nil {
+	if err := r.refreshRoot(ctx); err != nil {
 		return nil, err
 	}
-	want := 40
-	if m.Format == "sha256" {
-		want = 64
-	}
-	if len(sha) != want {
-		return nil, fmt.Errorf("use a full %s commit ID", m.Format)
-	}
-	if _, err := hex.DecodeString(sha); err != nil {
-		return nil, fmt.Errorf("invalid commit ID: %w", err)
-	}
-	sha = strings.ToLower(sha)
-	idx := &index{store: r.store, cache: r.cache, root: m.Root, blobRoot: m.Blobs}
-	if err := r.bindGlobalIndex(ctx, m, idx); err != nil {
-		return nil, err
-	}
-	var o object
-	if err := idx.get(ctx, "o/"+sha, &o); err != nil {
-		return nil, fmt.Errorf("commit %s: %w", sha, err)
-	}
-	if o.Kind != "commit" {
-		return nil, fmt.Errorf("%s is not a commit", sha)
-	}
-	return &Snapshot{idx: idx, history: &index{store: r.store, cache: r.cache, root: m.History}, SHA: sha, Tree: o.Tree}, nil
+	return r.progressive.Open(ctx, sha)
 }
-
-func treePrefix(tree string) string       { return "t/" + tree + "/" }
-func treeKey(tree, name string) string    { return treePrefix(tree) + hex.EncodeToString([]byte(name)) }
-func chunkKey(oid string, n int64) string { return fmt.Sprintf("b/%s/%016x", oid, n) }
-
+func (r *Repository) queryManifest(ctx context.Context) (manifest, error) {
+	if err := r.refreshRoot(ctx); err != nil {
+		return manifest{}, err
+	}
+	var refs pageRef
+	err := r.progressive.index().get(ctx, "refs-root", &refs)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return manifest{}, err
+	}
+	return manifest{Format: "sha1", RevisionGraph: true, Refs: refs}, nil
+}
 func (s *Snapshot) Lookup(ctx context.Context, tree, name string) (Entry, error) {
-	var o object
-	if err := s.idx.get(ctx, "o/"+tree, &o); err != nil {
-		return Entry{}, err
-	}
-	if o.Kind != "tree" {
-		return Entry{}, fmt.Errorf("%s is not a tree", tree)
-	}
-	if isNativeTree(o.Directory) {
-		e, err := s.lookupNativeTreeName(ctx, tree, o, name)
-		if err != nil {
-			return Entry{}, err
-		}
-		return s.hydrateDirent(ctx, e)
-	}
-	if o.Directory != (pageRef{}) {
-		return s.idx.lookupDirectory(ctx, o.Directory, name)
-	}
-	var e Entry
-	err := s.idx.get(ctx, treeKey(tree, name), &e)
-	e.Name = name
-	return e, err
+	return s.progressive.lookup(ctx, tree, name)
 }
-
-// ReadDir returns at most limit entries, ordered by raw filename bytes.
-// Pass the last returned Name as after to continue without loading the directory.
 func (s *Snapshot) ReadDir(ctx context.Context, tree, after string, limit int) ([]Entry, error) {
-	if limit < 1 || limit > fanout {
-		return nil, fmt.Errorf("directory batch must be 1..%d", fanout)
-	}
-	var o object
-	if err := s.idx.get(ctx, "o/"+tree, &o); err != nil {
-		return nil, err
-	}
-	if o.Kind != "tree" {
-		return nil, fmt.Errorf("%s is not a tree", tree)
-	}
-	if isNativeTree(o.Directory) {
-		names, err := s.readNativeTreeNames(ctx, tree, o, after, limit)
-		if err != nil {
-			return nil, err
-		}
-		return s.hydrateDirents(ctx, names)
-	}
-	if o.Directory != (pageRef{}) {
-		return s.idx.readDirectory(ctx, o.Directory, after, limit)
-	}
-	prefix := treePrefix(tree)
-	cursor := ""
-	if after != "" {
-		cursor = treeKey(tree, after)
-	}
-	items, err := s.idx.scan(ctx, prefix, cursor, limit)
-	if err != nil {
-		return nil, err
-	}
-	entries := make([]Entry, 0, len(items))
-	for _, v := range items {
-		var e Entry
-		if err := unmarshal(v.Value, &e); err != nil {
-			return nil, err
-		}
-		name, err := hex.DecodeString(strings.TrimPrefix(v.Key, prefix))
-		if err != nil {
-			return nil, err
-		}
-		e.Name = string(name)
-		entries = append(entries, e)
-	}
-	return entries, nil
+	return s.progressive.readDir(ctx, tree, after, limit)
 }
 
+// ReadDirectory lists an entry returned by Resolve, Lookup, or ReadDir.
+func (s *Snapshot) ReadDirectory(ctx context.Context, dir Entry, after string, limit int) ([]Entry, error) {
+	if dir.Mode != 0040000 {
+		return nil, store.ErrNotFound
+	}
+	return s.progressive.readDirAt(ctx, dir.OID, dir.directory, after, limit)
+}
+
+// LookupDirectory uses the immutable metadata pointer carried by dir, when ready.
+func (s *Snapshot) LookupDirectory(ctx context.Context, dir Entry, name string) (Entry, error) {
+	if dir.Mode != 0040000 {
+		return Entry{}, store.ErrNotFound
+	}
+	return s.progressive.lookupAt(ctx, dir.OID, dir.directory, name)
+}
+func (s *Snapshot) ReadAt(ctx context.Context, oid string, dest []byte, off int64) (int, error) {
+	return s.progressive.readAt(ctx, oid, dest, off)
+}
+func IsNotFound(err error) bool { return errors.Is(err, store.ErrNotFound) }
 func (s *Snapshot) Resolve(ctx context.Context, path string) (Entry, error) {
 	e := Entry{OID: s.Tree, Mode: 0040000}
 	if path == "" {
@@ -236,7 +142,7 @@ func (s *Snapshot) Resolve(ctx context.Context, path string) (Entry, error) {
 			return Entry{}, store.ErrNotFound
 		}
 		var err error
-		e, err = s.Lookup(ctx, e.OID, name)
+		e, err = s.LookupDirectory(ctx, e, name)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -244,145 +150,21 @@ func (s *Snapshot) Resolve(ctx context.Context, path string) (Entry, error) {
 	return e, nil
 }
 
-func (s *Snapshot) ReadAt(ctx context.Context, oid string, dest []byte, off int64) (int, error) {
-	if s.idx.blobRoot == (pageRef{}) {
-		return s.readAtLegacy(ctx, oid, dest, off)
+// Standalone readers observe new publications; mount readers share the writer's
+// live object pool and already receive those updates directly.
+func (r *Repository) refreshRoot(ctx context.Context) error {
+	if !r.refresh {
+		return nil
 	}
-	if off < 0 {
-		return 0, fmt.Errorf("negative offset")
-	}
-	if len(dest) == 0 {
-		return 0, nil
-	}
-	n := 0
-	var fullSize int64 = -1
-	for n < len(dest) {
-		part := off / ChunkSize
-		size, c, err := s.readBlobPart(ctx, oid, part)
-		if err != nil {
-			return n, err
-		}
-		if fullSize >= 0 && size != fullSize {
-			return n, fmt.Errorf("inconsistent direct blob size")
-		}
-		fullSize = size
-		if off >= size {
-			break
-		}
-		b, release, err := s.borrowChunk(ctx, c)
-		if err != nil {
-			release()
-			return n, err
-		}
-		expected := min(int64(ChunkSize), size-part*ChunkSize)
-		if int64(len(b)) != expected {
-			release()
-			return n, fmt.Errorf("invalid chunk size")
-		}
-		copied := copy(dest[n:], b[off%ChunkSize:])
-		release()
-		n += copied
-		off += int64(copied)
-	}
-	if n < len(dest) {
-		return n, io.EOF
-	}
-	return n, nil
-}
-
-func (s *Snapshot) readAtLegacy(ctx context.Context, oid string, dest []byte, off int64) (int, error) {
-	if off < 0 {
-		return 0, fmt.Errorf("negative offset")
-	}
-	if len(dest) == 0 {
-		return 0, nil
-	}
-	var o object
-	if err := s.idx.get(ctx, "o/"+oid, &o); err != nil {
-		return 0, err
-	}
-	if o.Kind != "blob" {
-		return 0, fmt.Errorf("%s is not a blob", oid)
-	}
-	if off >= o.Size {
-		return 0, io.EOF
-	}
-	n := 0
-	for n < len(dest) && off < o.Size {
-		part := off / ChunkSize
-		var c chunk
-		if err := s.idx.get(ctx, chunkKey(oid, part), &c); err != nil {
-			return n, err
-		}
-		if c.ArchiveRecipe != "" {
-			if _, err := checkedArchiveBlob(c, oid, o.Size, part); err != nil {
-				return n, err
-			}
-		}
-		b, release, err := s.borrowChunk(ctx, c)
-		if err != nil {
-			release()
-			return n, err
-		}
-		expected := int64(ChunkSize)
-		if remain := o.Size - part*ChunkSize; remain < expected {
-			expected = remain
-		}
-		if int64(len(b)) != expected {
-			release()
-			return n, fmt.Errorf("invalid chunk size")
-		}
-		copied := copy(dest[n:], b[off%ChunkSize:])
-		release()
-		n += copied
-		off += int64(copied)
-	}
-	if n < len(dest) {
-		return n, io.EOF
-	}
-	return n, nil
-}
-
-func IsNotFound(err error) bool { return errors.Is(err, store.ErrNotFound) }
-
-// NewDisk uses one persistent decoded-data cache. No compressed store wrapper or
-// retained RAM byte cache is installed. Small decode bookkeeping remains in RAM.
-func NewDisk(s store.Store, dir, identity string, budget int64) (*Repository, error) {
-	disk, err := store.NewDiskCache(nil, dir, identity, budget)
+	p := r.progressive
+	p.writer.Lock()
+	defer p.writer.Unlock()
+	latest, err := NewProgressive(ctx, r.store, r.cache.disk, p.temp)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	r, err := New(s, DefaultCacheBytes)
-	if err != nil {
-		disk.Close()
-		return nil, err
-	}
-	r.cache.max = 0
-	r.cache.disk = disk
-	return r, nil
-}
-
-func (r *Repository) Close() error {
-	r.globalMu.Lock()
-	defer r.globalMu.Unlock()
-	if r.globalSizes != nil {
-		_ = r.globalSizes.clear(context.Background())
-	}
-	if r.cache.disk != nil && !r.borrowedDisk {
-		return r.cache.disk.Close()
-	}
+	p.mu.Lock()
+	p.root, p.token = latest.root, latest.token
+	p.mu.Unlock()
 	return nil
-}
-
-// NewSharedDisk borrows one decoded cache across immutable repositories.
-// Cache keys identify content, so equal objects can share decoded bytes.
-// The caller must close repositories before closing disk.
-func NewSharedDisk(s store.Store, disk *store.DiskCache) (*Repository, error) {
-	r, err := New(s, 0)
-	if err != nil {
-		return nil, err
-	}
-	r.cache.disk = disk
-	r.borrowedDisk = true
-	return r, nil
 }

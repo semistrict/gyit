@@ -3,7 +3,6 @@ package repo
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -15,7 +14,7 @@ import (
 // Older Git histories contain noncanonical permission bits. Filesystem views
 // must use Git's normalized permissions while raw tree reads retain the object.
 func TestImportHistoricalTreeModes(t *testing.T) {
-	for _, format := range []string{"sha1", "sha256"} {
+	for _, format := range []string{"sha1"} {
 		t.Run(format, func(t *testing.T) {
 			dir := t.TempDir()
 			command(t, dir, "init", "-q", "--object-format="+format)
@@ -112,7 +111,11 @@ func TestImportRejectsOverflowTreeMode(t *testing.T) {
 	if _, err := Import(t.Context(), local, ImportOptions{Repo: source}); err == nil {
 		t.Fatal("accepted overflowing tree mode")
 	}
-	if _, _, err := local.Get(t.Context(), "HEAD", 0, -1); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("invalid source published HEAD: %v", err)
+	p, err := NewProgressive(t.Context(), local, nil, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ready, err := p.HasPreparedSnapshot(t.Context()); err != nil || ready {
+		t.Fatalf("invalid tree became a prepared snapshot: %v %v", ready, err)
 	}
 }

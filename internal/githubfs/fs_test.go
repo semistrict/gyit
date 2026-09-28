@@ -113,7 +113,7 @@ func TestNoticeThenAtomicSnapshot(t *testing.T) {
 		t.Fatalf("NOTICE was not replaced by real file: %q", got)
 	}
 	entries, err = f.ReadDir(t.Context(), "acme/project", "", 128)
-	if err != nil || len(entries) != 3 {
+	if err != nil || len(entries) != 2 {
 		t.Fatalf("ready directory %v %v", entries, err)
 	}
 }
@@ -245,7 +245,7 @@ func TestQuickSetupReturnsFilesWithoutPlaceholder(t *testing.T) {
 	if time.Since(started) >= 10*time.Second {
 		t.Fatal("small local import exceeded synchronous window")
 	}
-	if len(entries) != 3 || f.Generation("acme/project") != 2 {
+	if len(entries) != 2 || f.Generation("acme/project") != 2 {
 		t.Fatalf("not fully published: %v", entries)
 	}
 	if got := read(t, f, "acme/project/NOTICE"); got != "real repository notice\n" {
@@ -263,4 +263,23 @@ func TestSetupWaitHonorsCancellation(t *testing.T) {
 	if _, err := f.ReadDir(ctx, "acme/project", "", 128); err != context.DeadlineExceeded {
 		t.Fatalf("read: %v", err)
 	}
+}
+
+func waitHistory(t *testing.T, f *FS, path string) {
+	t.Helper()
+	_, target, err := parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := f.jobs[target.Key()]
+	snapshot, _, _ := j.status()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		state, err := j.progressive.State(t.Context(), snapshot.SHA)
+		if err == nil && state.HistoryComplete {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("history did not finish")
 }

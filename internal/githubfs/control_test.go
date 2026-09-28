@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"google.golang.org/protobuf/proto"
 	"gyit/internal/control"
 	"gyit/internal/controlcli"
 	pb "gyit/internal/gen/gyit/control/v1"
+
+	"google.golang.org/protobuf/proto"
 )
 
 func TestMountedHistoryControl(t *testing.T) {
@@ -32,6 +33,7 @@ func TestMountedHistoryControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	waitHistory(t, f, strings.TrimPrefix(path, "github.com/"))
 	if err := os.RemoveAll(strings.TrimPrefix(opts.RemoteBase, "file://")); err != nil {
 		t.Fatal(err)
 	}

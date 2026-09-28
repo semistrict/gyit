@@ -21,25 +21,22 @@ func (s metadataOnlyStore) Get(ctx context.Context, key string, off, n int64) ([
 }
 
 func TestRepositoryDiskCacheAcrossRemount(t *testing.T) {
-	for _, native := range []bool{false, true} {
-		t.Run(fmt.Sprint("native=", native), func(t *testing.T) {
+	for _, packed := range []bool{false, true} {
+		t.Run(fmt.Sprint("packed=", packed), func(t *testing.T) {
 			ctx := t.Context()
 			source := t.TempDir()
 			command(t, source, "init", "-q")
 			content := bytes.Repeat([]byte("first version of a real repository file\n"), 4096)
 			write(t, source, "sub/file", content)
 			first := commit(t, source)
-			if native {
+			if packed {
 				command(t, source, "gc", "--prune=now")
 			}
 			origin, err := store.NewLocal(t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
-			opts := ImportOptions{Repo: source, CompressionWorkers: 2}
-			if !native {
-				opts.DisableDeltas = true
-			}
+			opts := ImportOptions{Repo: source}
 			if _, err := Import(ctx, origin, opts); err != nil {
 				t.Fatal(err)
 			}
@@ -81,7 +78,7 @@ func TestRepositoryDiskCacheAcrossRemount(t *testing.T) {
 			read(cached, "HEAD", content)
 			write(t, source, "sub/file", secondContent)
 			commit(t, source)
-			if native {
+			if packed {
 				command(t, source, "gc", "--prune=now")
 			}
 			if _, err := Import(ctx, origin, opts); err != nil {

@@ -1,5 +1,10 @@
 # Test expansion research
 
+> Historical notes for the retired storage implementation. Its compatibility
+> readers, importer, and format-specific verification harnesses have been removed.
+> Current storage is documented in [OBJECT_STORE.md](OBJECT_STORE.md); current
+> checks are `go test ./...` and the progressive tests in `internal/repo/`.
+
 Investigated 2026-09-26. Recommendations below are proposals unless an existing
 test or implementation is linked explicitly. The [mutation closure](#mutation-closure)
 section records the completed follow-up on all 26 initial gaps.
@@ -277,7 +282,7 @@ Repeat the constant mutations independently of Gremlins:
 python3 scripts/check_gitdelta_budget_mutations.py
 ```
 
-The [runner](scripts/check_gitdelta_budget_mutations.py) first requires a clean
+The retired mutation runner first requires a clean
 baseline, compiles each exact mutation independently using Go overlays, and
 requires the named budget test to fail. Build failures, missing tests, process
 errors, and timeouts are never credited as kills. It preserves logs, overlays,

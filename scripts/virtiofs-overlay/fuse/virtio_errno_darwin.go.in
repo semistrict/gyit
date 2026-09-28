@@ -1,0 +1,36 @@
+package fuse
+
+import "syscall"
+
+// Darwin syscall numbers differ from the Linux guest ABI.
+func linuxErrno(e syscall.Errno) int32 {
+	switch e {
+	case syscall.EAGAIN:
+		return 11
+	case syscall.EDEADLK:
+		return 35
+	case syscall.ENOTSUP:
+		return 95
+	case syscall.ENOSYS:
+		return 38
+	case syscall.ENODATA, syscall.ENOATTR:
+		return 61
+	case syscall.EOVERFLOW:
+		return 75
+	case syscall.ENAMETOOLONG:
+		return 36
+	case syscall.ENOTEMPTY:
+		return 39
+	case syscall.ELOOP:
+		return 40
+	case syscall.ETIMEDOUT:
+		return 110
+	case syscall.ECANCELED:
+		return 125
+	default:
+		if e <= 34 {
+			return int32(e)
+		}
+		return 5
+	}
+}

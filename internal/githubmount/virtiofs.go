@@ -15,5 +15,6 @@ import (
 func Protocol(source *githubfs.FS, immutableTTL time.Duration) *fuse.ProtocolServer {
 	zero := time.Duration(0)
 	opts := &fs.Options{EntryTimeout: &zero, AttrTimeout: &zero, NegativeTimeout: &zero}
-	return fuse.NewProtocolServer(fs.NewNodeFS(&node{owner: fuse.Owner{Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid())}, source: githubfs.Namespace{FS: source}, immutableTTL: immutableTTL}, opts), &opts.MountOptions)
+	opts.ExtraCapabilities |= fuse.CAP_NO_OPENDIR_SUPPORT
+	return fuse.NewProtocolServer(statelessDirectories{fs.NewNodeFS(&node{owner: fuse.Owner{Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid())}, source: githubfs.Namespace{FS: source}, immutableTTL: immutableTTL}, opts)}, &opts.MountOptions)
 }

@@ -21,13 +21,17 @@ func number(data []byte, pos *int) (uint64, error) {
 	return 0, fmt.Errorf("varint overflow")
 }
 func apply(base, program []byte) ([]byte, error) {
+	return applyLimit(base, program, ChunkSize)
+}
+
+func applyLimit(base, program []byte, limit uint64) ([]byte, error) {
 	pos := 0
 	n, e := number(program, &pos)
 	if e != nil || n != uint64(len(base)) {
 		return nil, fmt.Errorf("delta base size")
 	}
 	n, e = number(program, &pos)
-	if e != nil || n > ChunkSize {
+	if e != nil || n > limit {
 		return nil, fmt.Errorf("delta result limit")
 	}
 	out := make([]byte, 0, int(n))

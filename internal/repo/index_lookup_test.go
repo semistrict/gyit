@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
 	storagev1 "gyit/internal/gen/gyit/storage/v1"
 	"gyit/internal/store"
+
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestIndexPointLookupDoesNotDecodeSiblings(t *testing.T) {

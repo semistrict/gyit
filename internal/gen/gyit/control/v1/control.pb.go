@@ -100,6 +100,7 @@ type Request struct {
 	//	*Request_PathLog
 	//	*Request_HistoryLog
 	//	*Request_View
+	//	*Request_Update
 	Operation     isRequest_Operation `protobuf_oneof:"operation"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -221,6 +222,15 @@ func (x *Request) GetView() *ViewRequest {
 	return nil
 }
 
+func (x *Request) GetUpdate() *UpdateRequest {
+	if x != nil {
+		if x, ok := x.Operation.(*Request_Update); ok {
+			return x.Update
+		}
+	}
+	return nil
+}
+
 type isRequest_Operation interface {
 	isRequest_Operation()
 }
@@ -259,6 +269,10 @@ type Request_View struct {
 	View *ViewRequest `protobuf:"bytes,9,opt,name=view,proto3,oneof"`
 }
 
+type Request_Update struct {
+	Update *UpdateRequest `protobuf:"bytes,10,opt,name=update,proto3,oneof"`
+}
+
 func (*Request_Status) isRequest_Operation() {}
 
 func (*Request_Switch) isRequest_Operation() {}
@@ -274,6 +288,8 @@ func (*Request_PathLog) isRequest_Operation() {}
 func (*Request_HistoryLog) isRequest_Operation() {}
 
 func (*Request_View) isRequest_Operation() {}
+
+func (*Request_Update) isRequest_Operation() {}
 
 type StatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -311,6 +327,43 @@ func (*StatusRequest) Descriptor() ([]byte, []int) {
 	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{1}
 }
 
+// Resolve the mounted branch/tag again; commit identifiers remain pinned.
+type UpdateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateRequest) Reset() {
+	*x = UpdateRequest{}
+	mi := &file_gyit_control_v1_control_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRequest) ProtoMessage() {}
+
+func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_control_v1_control_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateRequest) Descriptor() ([]byte, []int) {
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{2}
+}
+
 type SwitchRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Legacy full commit ID; new clients use revision.
@@ -322,7 +375,7 @@ type SwitchRequest struct {
 
 func (x *SwitchRequest) Reset() {
 	*x = SwitchRequest{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[2]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -334,7 +387,7 @@ func (x *SwitchRequest) String() string {
 func (*SwitchRequest) ProtoMessage() {}
 
 func (x *SwitchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[2]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -347,7 +400,7 @@ func (x *SwitchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchRequest.ProtoReflect.Descriptor instead.
 func (*SwitchRequest) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{2}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SwitchRequest) GetSha() string {
@@ -383,7 +436,7 @@ type Response struct {
 
 func (x *Response) Reset() {
 	*x = Response{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[3]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -395,7 +448,7 @@ func (x *Response) String() string {
 func (*Response) ProtoMessage() {}
 
 func (x *Response) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[3]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -408,7 +461,7 @@ func (x *Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Response.ProtoReflect.Descriptor instead.
 func (*Response) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{3}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Response) GetVersion() uint32 {
@@ -549,7 +602,7 @@ type Snapshot struct {
 
 func (x *Snapshot) Reset() {
 	*x = Snapshot{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[4]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -561,7 +614,7 @@ func (x *Snapshot) String() string {
 func (*Snapshot) ProtoMessage() {}
 
 func (x *Snapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[4]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -574,7 +627,7 @@ func (x *Snapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
 func (*Snapshot) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{4}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Snapshot) GetSha() string {
@@ -615,7 +668,7 @@ type Error struct {
 
 func (x *Error) Reset() {
 	*x = Error{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[5]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -627,7 +680,7 @@ func (x *Error) String() string {
 func (*Error) ProtoMessage() {}
 
 func (x *Error) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[5]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -640,7 +693,7 @@ func (x *Error) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Error.ProtoReflect.Descriptor instead.
 func (*Error) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{5}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Error) GetCode() ErrorCode {
@@ -671,7 +724,7 @@ type MountEndpoint struct {
 
 func (x *MountEndpoint) Reset() {
 	*x = MountEndpoint{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[6]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -683,7 +736,7 @@ func (x *MountEndpoint) String() string {
 func (*MountEndpoint) ProtoMessage() {}
 
 func (x *MountEndpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[6]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -696,7 +749,7 @@ func (x *MountEndpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MountEndpoint.ProtoReflect.Descriptor instead.
 func (*MountEndpoint) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{6}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MountEndpoint) GetVersion() uint32 {
@@ -729,16 +782,18 @@ type LogRequest struct {
 	FirstParent bool     `protobuf:"varint,3,opt,name=first_parent,json=firstParent,proto3" json:"first_parent,omitempty"`
 	Paths       [][]byte `protobuf:"bytes,4,rep,name=paths,proto3" json:"paths,omitempty"`
 	// If nonempty, revision was an unseparated argument that may instead name a path.
-	PossiblePath  []byte `protobuf:"bytes,5,opt,name=possible_path,json=possiblePath,proto3" json:"possible_path,omitempty"`
-	Follow        bool   `protobuf:"varint,6,opt,name=follow,proto3" json:"follow,omitempty"`
-	PathPrefix    []byte `protobuf:"bytes,7,opt,name=path_prefix,json=pathPrefix,proto3" json:"path_prefix,omitempty"`
+	PossiblePath []byte `protobuf:"bytes,5,opt,name=possible_path,json=possiblePath,proto3" json:"possible_path,omitempty"`
+	Follow       bool   `protobuf:"varint,6,opt,name=follow,proto3" json:"follow,omitempty"`
+	PathPrefix   []byte `protobuf:"bytes,7,opt,name=path_prefix,json=pathPrefix,proto3" json:"path_prefix,omitempty"`
+	// Normal log displays full commit IDs; avoid unused abbreviation lookups.
+	FullCommitIds bool `protobuf:"varint,8,opt,name=full_commit_ids,json=fullCommitIds,proto3" json:"full_commit_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LogRequest) Reset() {
 	*x = LogRequest{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[7]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +805,7 @@ func (x *LogRequest) String() string {
 func (*LogRequest) ProtoMessage() {}
 
 func (x *LogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[7]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +818,7 @@ func (x *LogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
 func (*LogRequest) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{7}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LogRequest) GetRevision() string {
@@ -815,6 +870,13 @@ func (x *LogRequest) GetPathPrefix() []byte {
 	return nil
 }
 
+func (x *LogRequest) GetFullCommitIds() bool {
+	if x != nil {
+		return x.FullCommitIds
+	}
+	return false
+}
+
 type LogEntry struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Sha                 string                 `protobuf:"bytes,1,opt,name=sha,proto3" json:"sha,omitempty"`
@@ -834,7 +896,7 @@ type LogEntry struct {
 
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[8]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -846,7 +908,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[8]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -859,7 +921,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{8}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LogEntry) GetSha() string {
@@ -940,7 +1002,7 @@ type LogEnd struct {
 
 func (x *LogEnd) Reset() {
 	*x = LogEnd{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[9]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -952,7 +1014,7 @@ func (x *LogEnd) String() string {
 func (*LogEnd) ProtoMessage() {}
 
 func (x *LogEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[9]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -965,7 +1027,7 @@ func (x *LogEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEnd.ProtoReflect.Descriptor instead.
 func (*LogEnd) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{9}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{10}
 }
 
 // Diff streams patch bytes in bounded chunks, then StreamEnd.
@@ -983,7 +1045,7 @@ type DiffRequest struct {
 
 func (x *DiffRequest) Reset() {
 	*x = DiffRequest{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[10]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -995,7 +1057,7 @@ func (x *DiffRequest) String() string {
 func (*DiffRequest) ProtoMessage() {}
 
 func (x *DiffRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[10]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1008,7 +1070,7 @@ func (x *DiffRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffRequest.ProtoReflect.Descriptor instead.
 func (*DiffRequest) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{10}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DiffRequest) GetFromRevision() string {
@@ -1062,7 +1124,7 @@ type DiffChunk struct {
 
 func (x *DiffChunk) Reset() {
 	*x = DiffChunk{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[11]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1074,7 +1136,7 @@ func (x *DiffChunk) String() string {
 func (*DiffChunk) ProtoMessage() {}
 
 func (x *DiffChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[11]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1087,7 +1149,7 @@ func (x *DiffChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffChunk.ProtoReflect.Descriptor instead.
 func (*DiffChunk) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{11}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DiffChunk) GetData() []byte {
@@ -1113,7 +1175,7 @@ type BlameRequest struct {
 
 func (x *BlameRequest) Reset() {
 	*x = BlameRequest{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[12]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1125,7 +1187,7 @@ func (x *BlameRequest) String() string {
 func (*BlameRequest) ProtoMessage() {}
 
 func (x *BlameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[12]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1138,7 +1200,7 @@ func (x *BlameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlameRequest.ProtoReflect.Descriptor instead.
 func (*BlameRequest) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{12}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *BlameRequest) GetRevision() string {
@@ -1213,7 +1275,7 @@ type BlameLine struct {
 
 func (x *BlameLine) Reset() {
 	*x = BlameLine{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[13]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1225,7 +1287,7 @@ func (x *BlameLine) String() string {
 func (*BlameLine) ProtoMessage() {}
 
 func (x *BlameLine) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[13]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1238,7 +1300,7 @@ func (x *BlameLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlameLine.ProtoReflect.Descriptor instead.
 func (*BlameLine) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{13}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *BlameLine) GetSha() string {
@@ -1389,7 +1451,7 @@ type StreamEnd struct {
 
 func (x *StreamEnd) Reset() {
 	*x = StreamEnd{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[14]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1401,7 +1463,7 @@ func (x *StreamEnd) String() string {
 func (*StreamEnd) ProtoMessage() {}
 
 func (x *StreamEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[14]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1414,7 +1476,7 @@ func (x *StreamEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamEnd.ProtoReflect.Descriptor instead.
 func (*StreamEnd) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{14}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{15}
 }
 
 // Read-only object, reference and history views. Arguments never invoke a shell.
@@ -1430,7 +1492,7 @@ type ViewRequest struct {
 
 func (x *ViewRequest) Reset() {
 	*x = ViewRequest{}
-	mi := &file_gyit_control_v1_control_proto_msgTypes[15]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1442,7 +1504,7 @@ func (x *ViewRequest) String() string {
 func (*ViewRequest) ProtoMessage() {}
 
 func (x *ViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_control_v1_control_proto_msgTypes[15]
+	mi := &file_gyit_control_v1_control_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1455,7 +1517,7 @@ func (x *ViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ViewRequest.ProtoReflect.Descriptor instead.
 func (*ViewRequest) Descriptor() ([]byte, []int) {
-	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{15}
+	return file_gyit_control_v1_control_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ViewRequest) GetCommand() string {
@@ -1490,7 +1552,7 @@ var File_gyit_control_v1_control_proto protoreflect.FileDescriptor
 
 const file_gyit_control_v1_control_proto_rawDesc = "" +
 	"\n" +
-	"\x1dgyit/control/v1/control.proto\x12\x0fgyit.control.v1\"\xee\x03\n" +
+	"\x1dgyit/control/v1/control.proto\x12\x0fgyit.control.v1\"\xa8\x04\n" +
 	"\aRequest\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x128\n" +
 	"\x06status\x18\x02 \x01(\v2\x1e.gyit.control.v1.StatusRequestH\x00R\x06status\x128\n" +
@@ -1501,9 +1563,12 @@ const file_gyit_control_v1_control_proto_rawDesc = "" +
 	"\bpath_log\x18\a \x01(\v2\x1b.gyit.control.v1.LogRequestH\x00R\apathLog\x12>\n" +
 	"\vhistory_log\x18\b \x01(\v2\x1b.gyit.control.v1.LogRequestH\x00R\n" +
 	"historyLog\x122\n" +
-	"\x04view\x18\t \x01(\v2\x1c.gyit.control.v1.ViewRequestH\x00R\x04viewB\v\n" +
+	"\x04view\x18\t \x01(\v2\x1c.gyit.control.v1.ViewRequestH\x00R\x04view\x128\n" +
+	"\x06update\x18\n" +
+	" \x01(\v2\x1e.gyit.control.v1.UpdateRequestH\x00R\x06updateB\v\n" +
 	"\toperation\"\x0f\n" +
-	"\rStatusRequest\"=\n" +
+	"\rStatusRequest\"\x0f\n" +
+	"\rUpdateRequest\"=\n" +
 	"\rSwitchRequest\x12\x10\n" +
 	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\tR\brevision\"\xbc\x03\n" +
@@ -1532,7 +1597,7 @@ const file_gyit_control_v1_control_proto_rawDesc = "" +
 	"\rMountEndpoint\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x16\n" +
 	"\x06socket\x18\x02 \x01(\tR\x06socket\x12!\n" +
-	"\fcontrol_file\x18\x03 \x01(\tR\vcontrolFile\"\xdc\x01\n" +
+	"\fcontrol_file\x18\x03 \x01(\tR\vcontrolFile\"\x84\x02\n" +
 	"\n" +
 	"LogRequest\x12\x1a\n" +
 	"\brevision\x18\x01 \x01(\tR\brevision\x12\x1b\n" +
@@ -1542,7 +1607,8 @@ const file_gyit_control_v1_control_proto_rawDesc = "" +
 	"\rpossible_path\x18\x05 \x01(\fR\fpossiblePath\x12\x16\n" +
 	"\x06follow\x18\x06 \x01(\bR\x06follow\x12\x1f\n" +
 	"\vpath_prefix\x18\a \x01(\fR\n" +
-	"pathPrefix\"\xe6\x02\n" +
+	"pathPrefix\x12&\n" +
+	"\x0ffull_commit_ids\x18\b \x01(\bR\rfullCommitIds\"\xe6\x02\n" +
 	"\bLogEntry\x12\x10\n" +
 	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x1b\n" +
 	"\tshort_sha\x18\x02 \x01(\tR\bshortSha\x12\x18\n" +
@@ -1632,48 +1698,50 @@ func file_gyit_control_v1_control_proto_rawDescGZIP() []byte {
 }
 
 var file_gyit_control_v1_control_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gyit_control_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_gyit_control_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_gyit_control_v1_control_proto_goTypes = []any{
 	(ErrorCode)(0),        // 0: gyit.control.v1.ErrorCode
 	(*Request)(nil),       // 1: gyit.control.v1.Request
 	(*StatusRequest)(nil), // 2: gyit.control.v1.StatusRequest
-	(*SwitchRequest)(nil), // 3: gyit.control.v1.SwitchRequest
-	(*Response)(nil),      // 4: gyit.control.v1.Response
-	(*Snapshot)(nil),      // 5: gyit.control.v1.Snapshot
-	(*Error)(nil),         // 6: gyit.control.v1.Error
-	(*MountEndpoint)(nil), // 7: gyit.control.v1.MountEndpoint
-	(*LogRequest)(nil),    // 8: gyit.control.v1.LogRequest
-	(*LogEntry)(nil),      // 9: gyit.control.v1.LogEntry
-	(*LogEnd)(nil),        // 10: gyit.control.v1.LogEnd
-	(*DiffRequest)(nil),   // 11: gyit.control.v1.DiffRequest
-	(*DiffChunk)(nil),     // 12: gyit.control.v1.DiffChunk
-	(*BlameRequest)(nil),  // 13: gyit.control.v1.BlameRequest
-	(*BlameLine)(nil),     // 14: gyit.control.v1.BlameLine
-	(*StreamEnd)(nil),     // 15: gyit.control.v1.StreamEnd
-	(*ViewRequest)(nil),   // 16: gyit.control.v1.ViewRequest
+	(*UpdateRequest)(nil), // 3: gyit.control.v1.UpdateRequest
+	(*SwitchRequest)(nil), // 4: gyit.control.v1.SwitchRequest
+	(*Response)(nil),      // 5: gyit.control.v1.Response
+	(*Snapshot)(nil),      // 6: gyit.control.v1.Snapshot
+	(*Error)(nil),         // 7: gyit.control.v1.Error
+	(*MountEndpoint)(nil), // 8: gyit.control.v1.MountEndpoint
+	(*LogRequest)(nil),    // 9: gyit.control.v1.LogRequest
+	(*LogEntry)(nil),      // 10: gyit.control.v1.LogEntry
+	(*LogEnd)(nil),        // 11: gyit.control.v1.LogEnd
+	(*DiffRequest)(nil),   // 12: gyit.control.v1.DiffRequest
+	(*DiffChunk)(nil),     // 13: gyit.control.v1.DiffChunk
+	(*BlameRequest)(nil),  // 14: gyit.control.v1.BlameRequest
+	(*BlameLine)(nil),     // 15: gyit.control.v1.BlameLine
+	(*StreamEnd)(nil),     // 16: gyit.control.v1.StreamEnd
+	(*ViewRequest)(nil),   // 17: gyit.control.v1.ViewRequest
 }
 var file_gyit_control_v1_control_proto_depIdxs = []int32{
 	2,  // 0: gyit.control.v1.Request.status:type_name -> gyit.control.v1.StatusRequest
-	3,  // 1: gyit.control.v1.Request.switch:type_name -> gyit.control.v1.SwitchRequest
-	8,  // 2: gyit.control.v1.Request.log:type_name -> gyit.control.v1.LogRequest
-	11, // 3: gyit.control.v1.Request.diff:type_name -> gyit.control.v1.DiffRequest
-	13, // 4: gyit.control.v1.Request.blame:type_name -> gyit.control.v1.BlameRequest
-	8,  // 5: gyit.control.v1.Request.path_log:type_name -> gyit.control.v1.LogRequest
-	8,  // 6: gyit.control.v1.Request.history_log:type_name -> gyit.control.v1.LogRequest
-	16, // 7: gyit.control.v1.Request.view:type_name -> gyit.control.v1.ViewRequest
-	5,  // 8: gyit.control.v1.Response.snapshot:type_name -> gyit.control.v1.Snapshot
-	6,  // 9: gyit.control.v1.Response.error:type_name -> gyit.control.v1.Error
-	9,  // 10: gyit.control.v1.Response.log_entry:type_name -> gyit.control.v1.LogEntry
-	10, // 11: gyit.control.v1.Response.log_end:type_name -> gyit.control.v1.LogEnd
-	12, // 12: gyit.control.v1.Response.diff_chunk:type_name -> gyit.control.v1.DiffChunk
-	14, // 13: gyit.control.v1.Response.blame_line:type_name -> gyit.control.v1.BlameLine
-	15, // 14: gyit.control.v1.Response.stream_end:type_name -> gyit.control.v1.StreamEnd
-	0,  // 15: gyit.control.v1.Error.code:type_name -> gyit.control.v1.ErrorCode
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	4,  // 1: gyit.control.v1.Request.switch:type_name -> gyit.control.v1.SwitchRequest
+	9,  // 2: gyit.control.v1.Request.log:type_name -> gyit.control.v1.LogRequest
+	12, // 3: gyit.control.v1.Request.diff:type_name -> gyit.control.v1.DiffRequest
+	14, // 4: gyit.control.v1.Request.blame:type_name -> gyit.control.v1.BlameRequest
+	9,  // 5: gyit.control.v1.Request.path_log:type_name -> gyit.control.v1.LogRequest
+	9,  // 6: gyit.control.v1.Request.history_log:type_name -> gyit.control.v1.LogRequest
+	17, // 7: gyit.control.v1.Request.view:type_name -> gyit.control.v1.ViewRequest
+	3,  // 8: gyit.control.v1.Request.update:type_name -> gyit.control.v1.UpdateRequest
+	6,  // 9: gyit.control.v1.Response.snapshot:type_name -> gyit.control.v1.Snapshot
+	7,  // 10: gyit.control.v1.Response.error:type_name -> gyit.control.v1.Error
+	10, // 11: gyit.control.v1.Response.log_entry:type_name -> gyit.control.v1.LogEntry
+	11, // 12: gyit.control.v1.Response.log_end:type_name -> gyit.control.v1.LogEnd
+	13, // 13: gyit.control.v1.Response.diff_chunk:type_name -> gyit.control.v1.DiffChunk
+	15, // 14: gyit.control.v1.Response.blame_line:type_name -> gyit.control.v1.BlameLine
+	16, // 15: gyit.control.v1.Response.stream_end:type_name -> gyit.control.v1.StreamEnd
+	0,  // 16: gyit.control.v1.Error.code:type_name -> gyit.control.v1.ErrorCode
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_gyit_control_v1_control_proto_init() }
@@ -1690,8 +1758,9 @@ func file_gyit_control_v1_control_proto_init() {
 		(*Request_PathLog)(nil),
 		(*Request_HistoryLog)(nil),
 		(*Request_View)(nil),
+		(*Request_Update)(nil),
 	}
-	file_gyit_control_v1_control_proto_msgTypes[3].OneofWrappers = []any{
+	file_gyit_control_v1_control_proto_msgTypes[4].OneofWrappers = []any{
 		(*Response_Snapshot)(nil),
 		(*Response_Error)(nil),
 		(*Response_LogEntry)(nil),
@@ -1706,7 +1775,7 @@ func file_gyit_control_v1_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gyit_control_v1_control_proto_rawDesc), len(file_gyit_control_v1_control_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

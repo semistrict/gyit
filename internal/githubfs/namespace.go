@@ -10,6 +10,9 @@ import (
 // Namespace is the gyit volume: github.com is a directory beneath its root.
 type Namespace struct{ *FS }
 
+// Immutable reports whether the namespace was opened without an update writer.
+func (n Namespace) Immutable() bool { return n.FS.preparedOnly }
+
 func namespacePath(path string) (string, error) {
 	if path == "github.com" {
 		return "", nil
@@ -74,7 +77,7 @@ func (n Namespace) Generation(path string) uint64 {
 // ReadyWorktree resolves an entry only after atomic snapshot publication. It
 // never starts an import. A filesystem inode may retain this immutable snapshot
 // identity for its own lifetime instead of resolving every child from the root.
-// Namespace directories, setup NOTICE, and virtual Git metadata return nil.
+// Namespace directories and setup NOTICE return nil.
 func (n Namespace) ReadyWorktree(ctx context.Context, path string) (*repo.Snapshot, repo.Entry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, repo.Entry{}, err
@@ -88,9 +91,6 @@ func (n Namespace) ReadyWorktree(ctx context.Context, path string) (*repo.Snapsh
 		return nil, repo.Entry{}, err
 	}
 	relative := strings.Join(parts[2:], "/")
-	if _, ok := gitPath(relative); ok {
-		return nil, repo.Entry{}, nil
-	}
 	n.FS.mu.Lock()
 	j := n.FS.jobs[target.Key()]
 	n.FS.mu.Unlock()

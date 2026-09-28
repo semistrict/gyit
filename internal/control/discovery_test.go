@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	pb "gyit/internal/gen/gyit/control/v1"
 	"google.golang.org/protobuf/proto"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 func TestDiscoveryWalksToNearestPhysicalMount(t *testing.T) {
@@ -108,5 +108,29 @@ func TestDiscoveryFindsControlFileFromNestedDirectory(t *testing.T) {
 	})
 	if err != nil || address != "fuse:"+filepath.Join(root, ".gyit.control") || gotRoot != root {
 		t.Fatalf("discovery: %q %q %v", address, gotRoot, err)
+	}
+}
+
+func TestDiscoveryMountRelativeControlFile(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cwd := filepath.Join(root, "nested")
+	if err = os.Mkdir(cwd, 0700); err != nil {
+		t.Fatal(err)
+	}
+	b, err := proto.Marshal(&pb.MountEndpoint{Version: Version, ControlFile: ControlFileName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, mount, err := discoverMount(cwd, func(path string) ([]byte, error) {
+		if path == root {
+			return b, nil
+		}
+		return nil, nil
+	})
+	if err != nil || endpoint != controlFilePrefix+filepath.Join(root, ControlFileName) || mount != root {
+		t.Fatalf("relative discovery: %q %q %v", endpoint, mount, err)
 	}
 }

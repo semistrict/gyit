@@ -25,6 +25,13 @@ type Store interface {
 	Put(context.Context, string, []byte, string) error
 }
 
+// VersionedWriter optionally returns the version assigned by an atomic write.
+// The token must identify that write, never a subsequent GET of a newer value.
+// This avoids a read-after-write round trip when the provider returns a version.
+type VersionedWriter interface {
+	PutVersion(context.Context, string, []byte, string) (string, error)
+}
+
 func validKey(key string) error {
 	if !fs.ValidPath(key) || key == "." {
 		return fmt.Errorf("invalid object key %q", key)
@@ -49,6 +56,11 @@ func Open(ctx context.Context, location, endpoint, region string) (Store, error)
 		return NewLocal(root)
 	case "s3":
 		return newS3(ctx, u, endpoint, region)
+	case "gs":
+		if endpoint != "" || region != "" {
+			return nil, fmt.Errorf("gs:// uses native GCS authentication and endpoint; omit S3 endpoint/region options")
+		}
+		return newGCS(ctx, u)
 	default:
 		return nil, fmt.Errorf("unsupported store scheme %q", u.Scheme)
 	}

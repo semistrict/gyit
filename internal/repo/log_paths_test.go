@@ -85,7 +85,8 @@ func TestFollowExactRenameReadsMetadataOnly(t *testing.T) {
 	if strings.Join(commits, " ") != tip+" "+root {
 		t.Fatal("did not follow exact rename", commits)
 	}
-	if measured.packGets != 0 {
-		t.Fatalf("exact rename fetched %d file-data ranges", measured.packGets)
+	blob := command(t, dir, "rev-parse", "HEAD:new")
+	if _, decoded := r.cache.get("progressive-object/" + blob); decoded {
+		t.Fatal("exact rename decoded file contents")
 	}
 }

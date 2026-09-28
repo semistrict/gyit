@@ -3,10 +3,6 @@ package repo
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -16,7 +12,6 @@ import (
 	"time"
 
 	"gyit/internal/store"
-	bolt "go.etcd.io/bbolt"
 )
 
 func refViewGit(t *testing.T, source string, args ...string) []byte {
@@ -104,110 +99,6 @@ func TestReferenceViewsPinnedHeadAndFreshRefs(t *testing.T) {
 	}
 	if out.String() != old+"\n"+next+"\n" {
 		t.Fatalf("mixed mounted HEAD and source ref: %q", out.String())
-	}
-}
-
-func TestReferenceMetadataUpgradeAndQuietNoMatch(t *testing.T) {
-	ctx := t.Context()
-	source := t.TempDir()
-	command(t, source, "init", "-q", "-b", "main")
-	write(t, source, "file", []byte("contents"))
-	commit(t, source)
-	command(t, source, "tag", "-am", "release", "release")
-	local, _ := store.NewLocal(t.TempDir())
-	if _, err := Import(ctx, local, ImportOptions{Repo: source}); err != nil {
-		t.Fatal(err)
-	}
-	m, token, err := readHead(ctx, local)
-	if err != nil {
-		t.Fatal(err)
-	}
-	idx := &index{store: local, cache: newCache(1 << 20), root: m.Refs}
-	refs, err := readViewRefs(ctx, idx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	db, err := bolt.Open(filepath.Join(t.TempDir(), "old.db"), 0600, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	err = db.Update(func(tx *bolt.Tx) error {
-		bucket, err := tx.CreateBucket([]byte("refs"))
-		if err != nil {
-			return err
-		}
-		for _, ref := range refs {
-			data, err := marshal(reference{Commit: ref.Commit})
-			if err != nil {
-				return err
-			}
-			if err := bucket.Put([]byte("r/"+ref.name), data); err != nil {
-				return err
-			}
-			if ref.ObjectID != "" && ref.ObjectID != ref.Commit {
-				if err := bucket.Put([]byte("a/"+ref.ObjectID), data); err != nil {
-					return err
-				}
-			}
-		}
-		hash := sha256.New()
-		if err := bucket.ForEach(func(k, v []byte) error {
-			for _, value := range [][]byte{k, v} {
-				var size [8]byte
-				binary.BigEndian.PutUint64(size[:], uint64(len(value)))
-				hash.Write(size[:])
-				hash.Write(value)
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		m.RefsHash = fmt.Sprintf("%x", hash.Sum(nil))
-		builder := &index{store: local, cache: newCache(1 << 20)}
-		m.Refs, err = builder.update(ctx, bucket)
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := marshal(m)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := local.Put(ctx, "HEAD", data, token); err != nil {
-		t.Fatal(err)
-	}
-	r, _ := New(local, 1<<20)
-	current, err := r.OpenRevision(ctx, "main", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := r.ViewRefs(ctx, current, ViewOptions{Command: "rev-parse", Args: []string{"release"}}, io.Discard); err == nil || !strings.Contains(err.Error(), "re-import") {
-		t.Fatalf("old metadata should require upgrade: %v", err)
-	}
-	upgraded, err := Import(ctx, local, ImportOptions{Repo: source})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if upgraded.Objects != 0 {
-		t.Fatal("metadata upgrade reread objects")
-	}
-	var out bytes.Buffer
-	if err := r.ViewRefs(ctx, current, ViewOptions{Command: "show-ref", Args: []string{"-d"}}, &out); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(out.Bytes(), refViewGit(t, source, "show-ref", "-d")) {
-		t.Fatal("upgraded reference identities do not match")
-	}
-	repeated, err := Import(ctx, local, ImportOptions{Repo: source})
-	if err != nil || repeated.Generation != upgraded.Generation {
-		t.Fatalf("repeated upgrade changed generation: %v", err)
-	}
-	out.Reset()
-	err = r.ViewRefs(ctx, current, ViewOptions{Command: "show-ref", Args: []string{"--quiet", "--verify", "refs/heads/missing"}}, &out)
-	if !errors.Is(err, ErrViewNoMatch) || out.Len() != 0 {
-		t.Fatalf("quiet missing ref: %v, output %q", err, out.String())
 	}
 }
 

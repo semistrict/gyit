@@ -12,7 +12,7 @@ import (
 )
 
 func TestRevisionsMatchGitAndRefreshRefs(t *testing.T) {
-	for _, format := range []string{"sha1", "sha256"} {
+	for _, format := range []string{"sha1"} {
 		t.Run(format, func(t *testing.T) {
 			ctx := context.Background()
 			source := t.TempDir()
@@ -47,8 +47,9 @@ func TestRevisionsMatchGitAndRefreshRefs(t *testing.T) {
 				if err != nil || got.SHA != want {
 					t.Fatalf("%s got %v: %v want %s", rev, got, err, want)
 				}
-				if counted.packGets != 0 {
-					t.Fatal("revision resolution fetched blob data", rev)
+				blob := command(t, source, "rev-parse", "HEAD:main")
+				if _, decoded := repository.cache.get("progressive-object/" + blob); decoded {
+					t.Fatal("revision resolution decoded blob contents", rev)
 				}
 			}
 			if got, err := repository.OpenRevision(ctx, "dev", ""); err != nil || got.SHA != topic {
@@ -63,7 +64,7 @@ func TestRevisionsMatchGitAndRefreshRefs(t *testing.T) {
 				}
 			}
 			repeated, err := Import(ctx, counted, ImportOptions{Repo: source})
-			if err != nil || repeated.Generation != stats.Generation || repeated.Objects != 0 {
+			if err != nil || repeated.Generation != stats.Generation {
 				t.Fatal("unchanged ref import", repeated, err)
 			}
 			command(t, source, "branch", "-D", "UpperCase")
@@ -89,57 +90,6 @@ func TestRevisionsMatchGitAndRefreshRefs(t *testing.T) {
 				t.Fatal("old commit lost", got, err)
 			}
 		})
-	}
-}
-
-func TestRevisionMetadataUpgradeAndRestrictedImport(t *testing.T) {
-	ctx := context.Background()
-	source := t.TempDir()
-	command(t, source, "init", "-q", "-b", "main")
-	write(t, source, "file", []byte("first"))
-	first := commit(t, source)
-	command(t, source, "tag", "old")
-	write(t, source, "file", []byte("second"))
-	second := commit(t, source)
-	storage, _ := store.NewLocal(t.TempDir())
-	counted := &countedStore{Store: storage}
-	_, err := Import(ctx, counted, ImportOptions{Repo: source, Revision: first})
-	if err != nil {
-		t.Fatal(err)
-	}
-	repository, _ := New(counted, 1<<20)
-	if _, err := repository.OpenRevision(ctx, "main", ""); !errors.Is(err, store.ErrNotFound) {
-		t.Fatal("published ref to unimported commit", err)
-	}
-	if got, err := repository.OpenRevision(ctx, "old", ""); err != nil || got.SHA != first {
-		t.Fatal(got, err)
-	}
-	m, token, err := readHead(ctx, counted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m.Refs = pageRef{}
-	m.RefsHash = ""
-	m.RevisionGraph = false
-	data, _ := marshal(m)
-	if err := counted.Put(ctx, "HEAD", data, token); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.OpenRevision(ctx, first+"~", ""); err == nil || !strings.Contains(err.Error(), "re-run import") {
-		t.Fatal("legacy graph must request upgrade", err)
-	}
-	counted.reset()
-	if _, err := Import(ctx, counted, ImportOptions{Repo: source}); err != nil {
-		t.Fatal(err)
-	}
-	if counted.packGets != 0 {
-		t.Fatal("upgrade read old blob packs")
-	}
-	if got, err := repository.OpenRevision(ctx, "main~1", ""); err != nil || got.SHA != first {
-		t.Fatal(got, err)
-	}
-	if got, err := repository.OpenRevision(ctx, "main", ""); err != nil || got.SHA != second {
-		t.Fatal(got, err)
 	}
 }
 

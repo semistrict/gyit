@@ -134,7 +134,7 @@ func (r *Repository) ViewShow(ctx context.Context, current *Snapshot, opt ViewOp
 				}
 				continue
 			}
-			old := &Snapshot{idx: s.idx}
+			old := &Snapshot{progressive: s.progressive, idx: s.idx}
 			if len(entry.Parents) > 0 {
 				old.Tree, err = s.commitTree(ctx, entry.Parents[0])
 				if err != nil {

@@ -3,7 +3,6 @@ package repo
 import (
 	"container/heap"
 	"context"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,75 +10,28 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"gyit/internal/store"
 )
 
-// Graph queries keep ancestry membership in bitsets keyed by the immutable
-// history positions. Eight MiB covers 67 million positions, independent of the
-// payload cache. Older stores use a bounded SHA set until reimported.
-const graphSetBudget = 8 << 20
+// Graph queries bound retained object identities independently of the payload cache.
 const graphFrontierLimit = 65536
 
-type viewGraphID struct {
-	pos uint64
-	sha string
-}
-type viewGraphSet struct {
-	bits   []uint64
-	legacy map[string]bool
-}
+type viewGraphID struct{ sha string }
+type viewGraphSet struct{ objects map[string]bool }
 
-func (s *viewGraphSet) has(id viewGraphID) bool {
-	if id.pos != 0 {
-		i := id.pos / 64
-		return i < uint64(len(s.bits)) && s.bits[i]&(1<<(id.pos%64)) != 0
-	}
-	return s.legacy[id.sha]
-}
+func (s *viewGraphSet) has(id viewGraphID) bool { return s.objects[id.sha] }
 func (s *viewGraphSet) add(id viewGraphID) error {
-	if id.pos != 0 {
-		i := id.pos / 64
-		if i >= graphSetBudget/8 {
-			return fmt.Errorf("history membership exceeds 8 MiB query budget")
-		}
-		if i >= uint64(len(s.bits)) {
-			s.bits = append(s.bits, make([]uint64, int(i)+1-len(s.bits))...)
-		}
-		s.bits[i] |= 1 << (id.pos % 64)
-		return nil
+	if s.objects == nil {
+		s.objects = map[string]bool{}
 	}
-	if s.legacy == nil {
-		s.legacy = map[string]bool{}
+	if !s.objects[id.sha] && len(s.objects) >= 100000 {
+		return fmt.Errorf("history query exceeds 100000 object budget")
 	}
-	if !s.legacy[id.sha] && len(s.legacy) >= 100000 {
-		return fmt.Errorf("legacy history query budget exceeded; reimport to build compact history index")
-	}
-	s.legacy[id.sha] = true
+	s.objects[id.sha] = true
 	return nil
 }
-func (s *viewGraphSet) remove(id viewGraphID) {
-	if id.pos != 0 {
-		i := id.pos / 64
-		if i < uint64(len(s.bits)) {
-			s.bits[i] &^= 1 << (id.pos % 64)
-		}
-	} else {
-		delete(s.legacy, id.sha)
-	}
-}
+func (s *viewGraphSet) remove(id viewGraphID) { delete(s.objects, id.sha) }
 func (s *viewGraphSet) each(fn func(viewGraphID) error) error {
-	for i, word := range s.bits {
-		for bit := uint64(0); word != 0; bit++ {
-			if word&(1<<bit) != 0 {
-				if err := fn(viewGraphID{pos: uint64(i)*64 + bit}); err != nil {
-					return err
-				}
-				word &^= 1 << bit
-			}
-		}
-	}
-	for sha := range s.legacy {
+	for sha := range s.objects {
 		if err := fn(viewGraphID{sha: sha}); err != nil {
 			return err
 		}
@@ -87,41 +39,15 @@ func (s *viewGraphSet) each(fn func(viewGraphID) error) error {
 	return nil
 }
 
-type viewGraph struct {
-	snapshot *Snapshot
-	cursor   historyCursor
-}
+type viewGraph struct{ snapshot *Snapshot }
 
-func newViewGraph(s *Snapshot) *viewGraph {
-	return &viewGraph{snapshot: s, cursor: historyCursor{idx: s.history}}
-}
+func newViewGraph(s *Snapshot) *viewGraph { return &viewGraph{snapshot: s} }
 func (g *viewGraph) id(ctx context.Context, sha string) (viewGraphID, error) {
-	if g.snapshot.history != nil && g.snapshot.history.root != (pageRef{}) {
-		var p historyPosition
-		if err := g.snapshot.history.get(ctx, "g/"+sha, &p); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return viewGraphID{sha: sha}, nil
-			}
-			return viewGraphID{}, err
-		}
-		return viewGraphID{pos: uint64(p), sha: sha}, nil
-	}
-	return viewGraphID{sha: sha}, nil
+	return viewGraphID{sha: sha}, ctx.Err()
 }
 func (g *viewGraph) node(ctx context.Context, id viewGraphID) (string, []viewGraphID, error) {
 	if err := ctx.Err(); err != nil {
 		return "", nil, err
-	}
-	if id.pos != 0 {
-		n, err := g.cursor.get(ctx, id.pos)
-		if err != nil {
-			return "", nil, err
-		}
-		ps := make([]viewGraphID, len(n.Parents))
-		for i, p := range n.Parents {
-			ps[i] = viewGraphID{pos: p}
-		}
-		return hex.EncodeToString(n.Oid), ps, nil
 	}
 	var p parents
 	if err := g.snapshot.idx.get(ctx, "p/"+id.sha, &p); err != nil {
@@ -129,13 +55,7 @@ func (g *viewGraph) node(ctx context.Context, id viewGraphID) (string, []viewGra
 	}
 	ps := make([]viewGraphID, len(p.Parents))
 	for i, sha := range p.Parents {
-		// A locally retained commit can join reachable history. Normalize that
-		// boundary so roots, exclusions, and visited sets use the same ID.
-		var err error
-		ps[i], err = g.id(ctx, sha)
-		if err != nil {
-			return "", nil, err
-		}
+		ps[i] = viewGraphID{sha: sha}
 	}
 	return id.sha, ps, nil
 }

@@ -45,6 +45,9 @@ func (idx *viewRefIndex) page(ctx context.Context, ref pageRef) (page, error) {
 }
 
 func (idx *viewRefIndex) get(ctx context.Context, key string, out any) error {
+	if idx.progressive != nil {
+		return idx.index.get(ctx, key, out)
+	}
 	id := idx.root
 	for id != (pageRef{}) {
 		p, err := idx.page(ctx, id)
@@ -68,6 +71,9 @@ func (idx *viewRefIndex) get(ctx context.Context, key string, out any) error {
 }
 
 func (idx *viewRefIndex) scan(ctx context.Context, prefix, after string, limit int) ([]item, error) {
+	if idx.progressive != nil {
+		return idx.index.scan(ctx, prefix, after, limit)
+	}
 	var result []item
 	start := max(prefix, after)
 	end := prefix + "\xff"
@@ -114,6 +120,26 @@ func (idx *viewRefIndex) scan(ctx context.Context, prefix, after string, limit i
 // Decode each requested commit leaf once instead of once per reference. Retain
 // at most 4 MiB of subjects; overflow falls back to exact per-row lookup.
 func (idx *viewRefIndex) subjects(ctx context.Context, ids []string) (map[string]string, error) {
+	if idx.progressive != nil {
+		out := make(map[string]string)
+		used := 0
+		for _, id := range ids {
+			if _, ok := out[id]; ok {
+				continue
+			}
+			var c commitInfo
+			if err := idx.get(ctx, "c/"+id, &c); err != nil {
+				return nil, err
+			}
+			subject := viewRefSubject(c)
+			used += len(id) + len(subject) + 128
+			if used > 4<<20 {
+				break
+			}
+			out[id] = subject
+		}
+		return out, nil
+	}
 	sort.Strings(ids)
 	subjects := make(map[string]string)
 	used := 0

@@ -49,8 +49,10 @@ func TestViewPinsOnePublicationAcrossObjects(t *testing.T) {
 	if _, err := Import(ctx, local, ImportOptions{Repo: dir}); err != nil {
 		t.Fatal(err)
 	}
-	advancing := &advancingViewStore{Store: local, first: head}
-	r, _ := New(advancing, 1<<20)
+	advancing := &advancingViewStore{Store: local, first: nil}
+	r, _ := New(local, 1<<20)
+	advancing.first = head
+	r.store = advancing
 	var out bytes.Buffer
 	if err := r.View(ctx, current, ViewOptions{Command: "show", Args: []string{"main:file", "main:file"}}, &out); err != nil {
 		t.Fatal(err)

@@ -85,3 +85,34 @@ func TestPositionalRevisionAndInterspersedFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateRequest(t *testing.T) {
+	dir, err := os.MkdirTemp("", "gyit-update-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "s")
+	requests := make(chan *pb.Request, 1)
+	server, err := control.Listen(t.Context(), socket, func(_ context.Context, r *pb.Request) *pb.Response {
+		requests <- r
+		return &pb.Response{Version: control.Version, Result: &pb.Response_Snapshot{Snapshot: &pb.Snapshot{Sha: strings.Repeat("a", 40), Tree: "tree"}}}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	var out, stderr bytes.Buffer
+	if err := Run(t.Context(), []string{"update", "--socket", socket}, &out, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	if (<-requests).GetUpdate() == nil {
+		t.Fatal("wrong operation")
+	}
+	if !strings.Contains(out.String(), strings.Repeat("a", 40)) {
+		t.Fatal("missing resulting commit")
+	}
+	if err := Run(t.Context(), []string{"update", "--socket", socket, "main"}, &out, &stderr); err == nil {
+		t.Fatal("accepted revision override")
+	}
+}

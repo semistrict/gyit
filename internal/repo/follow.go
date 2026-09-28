@@ -28,8 +28,8 @@ func (s *Snapshot) followSource(ctx context.Context, sha, parent, name string, b
 	if err != nil {
 		return "", err
 	}
-	current := &Snapshot{idx: s.idx, Tree: currentTree}
-	old := &Snapshot{idx: s.idx, Tree: oldTree}
+	current := &Snapshot{progressive: s.progressive, idx: s.idx, Tree: currentTree}
+	old := &Snapshot{progressive: s.progressive, idx: s.idx, Tree: oldTree}
 	target, err := current.Resolve(ctx, name)
 	if errors.Is(err, store.ErrNotFound) {
 		return name, nil

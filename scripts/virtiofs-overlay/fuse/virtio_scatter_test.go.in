@@ -1,0 +1,47 @@
+package fuse
+
+import (
+	"bytes"
+	"encoding/binary"
+	"testing"
+)
+
+type scatterReadFS struct {
+	RawFileSystem
+	data []byte
+}
+
+func (f scatterReadFS) Read(_ <-chan struct{}, in *ReadIn, _ []byte) (ReadResult, Status) {
+	if in.Offset >= uint64(len(f.data)) {
+		return ReadResultData(nil), OK
+	}
+	end := min(uint64(len(f.data)), in.Offset+uint64(in.Size))
+	return ReadResultData(f.data[in.Offset:end]), OK
+}
+
+func TestScatterReadAcrossGuestPages(t *testing.T) {
+	data := bytes.Repeat([]byte("fragmented guest read\n"), 2000)
+	ps := NewProtocolServer(scatterReadFS{NewDefaultRawFileSystem(), data}, &MountOptions{})
+	for _, off := range []uint64{0, 123, uint64(len(data))} {
+		in := make([]byte, 80)
+		binary.LittleEndian.PutUint32(in, uint32(len(in)))
+		binary.LittleEndian.PutUint32(in[4:], 15) // READ
+		binary.LittleEndian.PutUint64(in[8:], 42)
+		binary.LittleEndian.PutUint64(in[16:], 1)
+		binary.LittleEndian.PutUint64(in[48:], off)
+		binary.LittleEndian.PutUint32(in[56:], 65536)
+		out := bytes.Repeat([]byte{0xa5}, 65552)
+		var fragments [][]byte
+		for pos := 0; pos < len(out); pos += 113 {
+			fragments = append(fragments, out[pos:min(pos+113, len(out))])
+		}
+		n, status := ps.HandleScatter([][]byte{in[:7], in[7:19], in[19:]}, fragments)
+		want := data[off:]
+		if status != OK || n != 16+len(want) || binary.LittleEndian.Uint32(out) != uint32(n) || binary.LittleEndian.Uint32(out[4:]) != 0 || binary.LittleEndian.Uint64(out[8:]) != 42 || !bytes.Equal(out[16:n], want) {
+			t.Fatalf("offset %d: status=%v bytes=%d header=%x", off, status, n, out[:16])
+		}
+		if !bytes.Equal(out[n:], bytes.Repeat([]byte{0xa5}, len(out)-n)) {
+			t.Fatal("wrote beyond response length")
+		}
+	}
+}

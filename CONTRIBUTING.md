@@ -1,7 +1,6 @@
 # Contributing
 
-Build from the repository root with Go 1.26.6+, Git, a C compiler, and zlib
-headers installed:
+Build from the repository root with Go 1.26.6+, Git installed:
 
 ```sh
 go build -o gyit ./cmd/gyit
@@ -16,16 +15,12 @@ GOOS=linux CGO_ENABLED=0 go build -o .build/gyit-linux ./cmd/gyit
 ```
 
 Structured formats are protobuf. Edit `proto/` sources, then run `buf lint`
-and `buf generate`; never edit generated Go files directly.
+and `buf generate --clean`; never edit generated Go files directly.
 
 The normal suite uses small local fixtures. Large repository imports, mounted
 FUSE checks, and remote object-store tests are opt-in; see [benchmarks](BENCHMARKS.md),
 [correctness checks](CORRECTNESS.md), and [Linux VM setup](LIMA.md).
 Do not run a full Linux import as part of ordinary tests.
-
-The [test expansion notes](TESTING_RESEARCH.md) describe the seeded real-Git
-fixtures, virtual-time simulations, publication fault schedules, fuzz targets,
-and the audited Gremlins trial, including focused run commands and limits.
 
 Native macOS instructions and bridge tests are in [macos/README.md](macos/README.md).
 A local signed build is not a notarized public app distribution.

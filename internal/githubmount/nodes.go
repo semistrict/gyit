@@ -12,46 +12,69 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
+	"gyit/internal/control"
+	"gyit/internal/controlfuse"
 	"gyit/internal/githubfs"
 	"gyit/internal/macfs"
 	"gyit/internal/repo"
+
+	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 type node struct {
 	fs.Inode
+	controlfuse.ReadOnlyMutations
 	source       githubfs.Namespace
 	path         string
 	owner        fuse.Owner
 	immutableTTL time.Duration
 	item         atomic.Pointer[worktreeItem]
+	resume       atomic.Pointer[directoryResume]
+}
+
+// Keep only the latest continuation and its preceding name. READDIR may read
+// one extra entry that does not fit its reply. This bounded hint avoids replay
+// from the beginning for each stateless request; misses still support seeking.
+type directoryResume struct {
+	generation     uint64
+	offset         uint64
+	name, previous string
 }
 
 type worktreeItem struct {
-	snapshot *repo.Snapshot
-	entry    repo.Entry
+	snapshot   *repo.Snapshot
+	entry      repo.Entry
+	generation uint64
 }
 
 func (n *node) worktree(ctx context.Context) (*worktreeItem, error) {
-	if item := n.item.Load(); item != nil {
+	generation := n.source.Generation(n.path)
+	if item := n.item.Load(); item != nil && item.generation == generation {
 		return item, nil
 	}
 	snapshot, entry, err := n.source.ReadyWorktree(ctx, n.path)
 	if err != nil || snapshot == nil {
 		return nil, err
 	}
-	item := &worktreeItem{snapshot: snapshot, entry: entry}
-	n.item.CompareAndSwap(nil, item)
-	return n.item.Load(), nil
+	item := &worktreeItem{snapshot: snapshot, entry: entry, generation: generation}
+	n.item.Store(item)
+	return item, nil
 }
 
-// Namespace directories retain their identity and attributes while children are
-// added. Cache positive lookups, never their changing directory listings or
-// negative names. The setup NOTICE remains uncached until publication.
+// Cache positive metadata for published entries. Live namespaces use a bounded
+// TTL and directory generation mtimes; setup NOTICE and negative names stay
+// uncached until publication.
 func (n *node) stableMetadata(path string, e repo.Entry, generation uint64) bool {
 	return (e.Mode == 0040000 && strings.Count(path, "/") <= 2) ||
 		(generation > 1 && generation == n.source.Generation(path))
+}
+
+func (n *node) metadataTTL() time.Duration {
+	if !n.source.Immutable() && n.immutableTTL > time.Second {
+		return time.Second
+	}
+	return n.immutableTTL
 }
 
 func errno(err error) syscall.Errno {
@@ -91,6 +114,12 @@ func attr(a *fuse.Attr, e repo.Entry, path string, owner fuse.Owner) {
 		a.Nlink = 2
 	}
 }
+
+func (n *node) directoryAttr(a *fuse.Attr, path string) {
+	if a.Mode&syscall.S_IFMT == syscall.S_IFDIR {
+		a.Mtime = n.source.DirectoryVersion(path)
+	}
+}
 func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\x00") {
 		return nil, syscall.EINVAL
@@ -99,17 +128,20 @@ func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	if n.path != "" {
 		p = n.path + "/" + name
 	}
+	if name == control.ControlFileName && strings.Count(n.path, "/") == 2 {
+		return n.controlLookup(ctx, p, out)
+	}
 	generation := n.source.Generation(p)
 	var e repo.Entry
 	item, err := n.worktree(ctx)
 	if err != nil {
 		return nil, errno(err)
 	}
-	if item != nil && !(strings.Count(n.path, "/") == 2 && name == ".git") {
+	if item != nil {
 		if item.entry.Mode == 0160000 {
 			return nil, syscall.ENOENT
 		}
-		e, err = item.snapshot.Lookup(ctx, item.entry.OID, name)
+		e, err = item.snapshot.LookupDirectory(ctx, item.entry, name)
 	} else {
 		e, err = n.source.Lookup(ctx, p)
 	}
@@ -121,14 +153,15 @@ func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 
 func (n *node) child(ctx context.Context, p string, e repo.Entry, generation uint64, out *fuse.EntryOut) *fs.Inode {
 	attr(&out.Attr, e, p, n.owner)
+	n.directoryAttr(&out.Attr, p)
 	if n.immutableTTL > 0 && n.stableMetadata(p, e, generation) {
-		out.SetEntryTimeout(n.immutableTTL)
-		out.SetAttrTimeout(n.immutableTTL)
+		out.SetEntryTimeout(n.metadataTTL())
+		out.SetAttrTimeout(n.metadataTTL())
 	}
 	child := &node{source: n.source, path: p, immutableTTL: n.immutableTTL, owner: n.owner}
 	if e.OID != "" {
 		if parent, err := n.worktree(ctx); err == nil && parent != nil {
-			child.item.Store(&worktreeItem{snapshot: parent.snapshot, entry: e})
+			child.item.Store(&worktreeItem{snapshot: parent.snapshot, entry: e, generation: parent.generation})
 		}
 	}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: mode(e), Ino: macfs.Inode(p)})
@@ -140,8 +173,9 @@ func (n *node) Getattr(ctx context.Context, _ fs.FileHandle, out *fuse.AttrOut) 
 		return errno(err)
 	}
 	attr(&out.Attr, e, n.path, n.owner)
+	n.directoryAttr(&out.Attr, n.path)
 	if n.immutableTTL > 0 && n.stableMetadata(n.path, e, generation) {
-		out.SetTimeout(n.immutableTTL)
+		out.SetTimeout(n.metadataTTL())
 	}
 	return 0
 }
@@ -166,6 +200,7 @@ type directory struct {
 	after      string
 	entries    []repo.Entry
 	last       repo.Entry
+	previous   string
 	generation uint64
 	offset     uint64
 	err        syscall.Errno
@@ -186,7 +221,7 @@ func (d *directory) HasNext() bool {
 		if item.entry.Mode == 0160000 {
 			entries = nil
 		} else {
-			entries, err = item.snapshot.ReadDir(d.ctx, item.entry.OID, d.after, 128)
+			entries, err = item.snapshot.ReadDirectory(d.ctx, item.entry, d.after, 128)
 		}
 	} else if err == nil {
 		entries, err = d.n.source.ReadDir(d.ctx, d.n.path, d.after, 128)
@@ -211,6 +246,7 @@ func (d *directory) Next() (fuse.DirEntry, syscall.Errno) {
 	}
 	e := d.entries[0]
 	d.entries = d.entries[1:]
+	d.previous = d.last.Name
 	d.last = e
 	d.offset++
 	p := e.Name
@@ -219,7 +255,13 @@ func (d *directory) Next() (fuse.DirEntry, syscall.Errno) {
 	}
 	return fuse.DirEntry{Name: e.Name, Mode: mode(e), Ino: macfs.Inode(p), Off: d.offset}, 0
 }
-func (d *directory) Close() { d.entries = nil; d.done = true }
+func (d *directory) Close() {
+	if d.generation > 1 && d.offset > 0 {
+		d.n.resume.Store(&directoryResume{d.generation, d.offset, d.last.Name, d.previous})
+	}
+	d.entries = nil
+	d.done = true
+}
 func (n *node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	return &directory{ctx: ctx, n: n}, 0
 }
@@ -239,7 +281,9 @@ func (d *directory) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 	return d.n.child(ctx, p, d.last, d.generation, out), 0
 }
 func (n *node) OpendirHandle(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	return &directory{ctx: ctx, n: n}, 0, 0
+	// AUTO_INVAL_DATA revalidates directory mtime before reusing a listing.
+	// Live attributes expire within one second; publication advances DirectoryVersion.
+	return &directory{ctx: ctx, n: n}, fuse.FOPEN_CACHE_DIR | fuse.FOPEN_KEEP_CACHE, 0
 }
 func (d *directory) Readdirent(ctx context.Context) (*fuse.DirEntry, syscall.Errno) {
 	d.ctx = ctx
@@ -251,6 +295,19 @@ func (d *directory) Readdirent(ctx context.Context) (*fuse.DirEntry, syscall.Err
 }
 func (d *directory) Seekdir(ctx context.Context, off uint64) syscall.Errno {
 	*d = directory{ctx: ctx, n: d.n}
+	if hint := d.n.resume.Load(); off > 0 && hint != nil && hint.generation == d.n.source.Generation(d.n.path) {
+		name := ""
+		if off == hint.offset {
+			name = hint.name
+		} else if off == hint.offset-1 {
+			name = hint.previous
+		}
+		if name != "" {
+			d.after, d.offset = name, off
+			d.last.Name = name
+			return 0
+		}
+	}
 	for d.offset < off {
 		if !d.HasNext() {
 			return syscall.EINVAL
@@ -263,20 +320,22 @@ func (d *directory) Seekdir(ctx context.Context, off uint64) syscall.Errno {
 }
 func (d *directory) Releasedir(context.Context, uint32) { d.Close() }
 
-func (n *node) Open(_ context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
+func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	if flags&syscall.O_ACCMODE != syscall.O_RDONLY {
 		return nil, 0, syscall.EROFS
 	}
-	// Native Git mmaps pack/index files. These files are immutable for the
-	// lifetime of a pinned repository, so kernel caching is safe here.
-	parts := strings.SplitN(n.path, "/", 5)
-	if len(parts) == 5 && parts[0] == "github.com" && parts[3] == ".git" {
-		return nil, fuse.FOPEN_KEEP_CACHE, 0
-	}
-	return nil, fuse.FOPEN_DIRECT_IO, 0
-}
-func (n *node) Read(ctx context.Context, _ fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	item, err := n.worktree(ctx)
+	if err != nil {
+		return nil, 0, errno(err)
+	}
+	return item, fuse.FOPEN_DIRECT_IO, 0
+}
+func (n *node) Read(ctx context.Context, handle fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	item, _ := handle.(*worktreeItem)
+	var err error
+	if item == nil {
+		item, err = n.worktree(ctx)
+	}
 	if err != nil {
 		return nil, errno(err)
 	}
@@ -322,7 +381,7 @@ func (n *node) Getxattr(ctx context.Context, name string, dest []byte) (uint32, 
 	if name != "user.gyit.control" {
 		return 0, syscall.ENODATA
 	}
-	b, err := n.source.Endpoint(ctx, n.path)
+	b, err := n.controlAttribute(ctx)
 	if err != nil {
 		return 0, errno(err)
 	}

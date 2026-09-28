@@ -3,9 +3,9 @@ package repo
 import (
 	"container/heap"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"gyit/internal/pathspec"
 	"gyit/internal/store"
@@ -71,6 +71,7 @@ func (s *Snapshot) LogPaths(ctx context.Context, count int, firstParent bool, pa
 type LogOptions struct {
 	Count               int
 	FirstParent, Follow bool
+	FullCommitIDs       bool // Skip unused commit abbreviations; merge parent IDs still abbreviate.
 	Paths               []string
 	Prefix              string
 	// Attribute rules come from the mounted checkout, even for historical queries.
@@ -106,8 +107,13 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 	if count == 0 {
 		return nil
 	}
+	if !opt.Follow && len(paths) == 1 && s.progressive != nil {
+		return s.indexedFileLog(ctx, paths[0], opt, emit)
+	}
+	linear := true
+	baseCtx := ctx
+	ctx = context.WithValue(ctx, commitFetchDepth{}, count)
 	queue := &logQueue{}
-	cursor := &historyCursor{idx: s.history}
 	seen := map[string]bool{}
 	seenBytes := 0
 	key := func(sha, name string) string {
@@ -156,26 +162,9 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 			return err
 		}
 		candidate := heap.Pop(queue).(logCandidate)
+
 		if opt.Follow {
 			paths = []string{candidate.path}
-		}
-		// With no competing frontier, skipping unchanged first-parent steps cannot
-		// reorder output, even when commit clocks run backwards. At a branch frontier
-		// keep ordinary date-priority traversal instead.
-		if len(paths) > 0 && queue.Len() == 0 && s.history != nil && s.history.root != (pageRef{}) {
-			sha, err := s.advanceUnchangedLog(ctx, candidate.sha, paths, cursor)
-			if err != nil {
-				return err
-			}
-			if sha != candidate.sha {
-				if seen[key(sha, candidate.path)] {
-					continue
-				}
-				if err := mark(sha, candidate.path); err != nil {
-					return err
-				}
-				candidate.sha = sha
-			}
 		}
 
 		var p parents
@@ -209,7 +198,11 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 		if show {
 			// Only commit/blob/tree collisions are relevant to these displayed IDs.
 			emptyRefs := &index{store: s.idx.store, cache: s.idx.cache}
-			short, err := abbreviate(ctx, s.idx, emptyRefs, candidate.sha)
+			var short string
+			var err error
+			if !opt.FullCommitIDs {
+				short, err = abbreviate(ctx, s.idx, emptyRefs, candidate.sha)
+			}
 			if err != nil {
 				return err
 			}
@@ -230,6 +223,16 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 				break
 			}
 		}
+		if len(next) > 1 {
+			linear = false
+		} else if linear {
+			// Before the first fork, every visited commit is a descendant of the
+			// sole continuation. None can reappear in its ancestry. Do not retain
+			// an unbounded chain of unchanged commits for sparse file histories.
+			clear(seen)
+			seenBytes = 0
+		}
+		ctx = context.WithValue(baseCtx, commitFetchDepth{}, count-written)
 		for _, parent := range next {
 			name := candidate.path
 			if opt.Follow {
@@ -254,19 +257,63 @@ func (s *Snapshot) logPathEntries(ctx context.Context, sha string, paths []strin
 	if err := s.idx.get(ctx, "o/"+sha, &o); err != nil {
 		return nil, err
 	}
-	snapshot := &Snapshot{idx: s.idx, Tree: o.Tree}
+	snapshot := &Snapshot{progressive: s.progressive, idx: s.idx, Tree: o.Tree}
 	entries := make([]Entry, len(paths))
 	for i, path := range paths {
 		if path == "." {
 			path = ""
 		}
-		e, err := snapshot.Resolve(ctx, path)
+		e, err := snapshot.logPathEntry(ctx, path)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, err
 		}
 		entries[i] = e
 	}
 	return entries, nil
+}
+
+// History comparisons need identity and mode, never size or file contents.
+// Walk native trees directly: filesystem Resolve may acquire missing blobs to
+// prepare exact stat sizes, which is unnecessary for log on a blobless store.
+func (s *Snapshot) logPathEntry(ctx context.Context, path string) (Entry, error) {
+	if path == "" {
+		return Entry{OID: s.Tree, Mode: 0040000}, nil
+	}
+	if s.progressive == nil {
+		return s.Resolve(ctx, path)
+	}
+	e := Entry{OID: s.Tree, Mode: 0040000}
+	for _, name := range strings.Split(path, "/") {
+		if e.Mode != 0040000 {
+			return Entry{}, store.ErrNotFound
+		}
+		if err := s.progressive.Ensure(ctx, []string{e.OID}); err != nil {
+			return Entry{}, err
+		}
+		raw, kind, err := s.progressive.object(ctx, e.OID)
+		if err != nil {
+			return Entry{}, err
+		}
+		if kind != 2 {
+			return Entry{}, fmt.Errorf("history path parent is not a tree")
+		}
+		entries, err := parseNativeTree(raw)
+		if err != nil {
+			return Entry{}, err
+		}
+		found := false
+		for _, child := range entries {
+			if child.Name == name {
+				e = Entry{Name: child.Name, OID: child.OID, Mode: child.Mode, RawMode: child.RawMode}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return Entry{}, store.ErrNotFound
+		}
+	}
+	return e, nil
 }
 
 func (s *Snapshot) simplifyLogPaths(ctx context.Context, sha string, parents, paths []string) (bool, []string, error) {
@@ -299,47 +346,4 @@ func (s *Snapshot) simplifyLogPaths(ctx context.Context, sha string, parents, pa
 		}
 	}
 	return true, parents, nil
-}
-
-// Changed-path filters contain full file names, not directory prefixes. Only
-// skip while every selected entry is a present non-directory. A transition to
-// absence/directory changes that exact name and stops the skip at a Bloom hit.
-func (s *Snapshot) advanceUnchangedLog(ctx context.Context, sha string, paths []string, cursor *historyCursor) (string, error) {
-	entries, err := s.logPathEntries(ctx, sha, paths)
-	if err != nil {
-		return "", err
-	}
-	for _, e := range entries {
-		if e.OID == "" || e.Mode == 0040000 {
-			return sha, nil
-		}
-	}
-	var position historyPosition
-	if err := s.history.get(ctx, "g/"+sha, &position); err != nil {
-		// Complete local commit metadata can outlive the reachable-only
-		// history accelerator. Ordinary path comparison remains authoritative.
-		if errors.Is(err, store.ErrNotFound) {
-			return sha, nil
-		}
-		return "", err
-	}
-	for {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		node, err := cursor.get(ctx, uint64(position))
-		if err != nil {
-			return "", err
-		}
-		sha = hex.EncodeToString(node.Oid)
-		if len(node.Parents) == 0 {
-			return sha, nil
-		}
-		for _, path := range paths {
-			if mayChangePath(node.ChangedPaths, path) {
-				return sha, nil
-			}
-		}
-		position = historyPosition(node.Parents[0])
-	}
 }

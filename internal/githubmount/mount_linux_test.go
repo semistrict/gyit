@@ -5,12 +5,15 @@ package githubmount
 import (
 	"bytes"
 	"context"
+	"errors"
+	"gyit/internal/control"
 	"gyit/internal/controlcli"
 	"gyit/internal/githubfs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -34,6 +37,8 @@ func TestMountedBackgroundPublication(t *testing.T) {
 	}
 	git("init", "-q", "-b", "main")
 	os.WriteFile(filepath.Join(source, "hello"), []byte("ready\n"), 0600)
+	os.Mkdir(filepath.Join(source, "sub"), 0700)
+	os.WriteFile(filepath.Join(source, "sub", "removed"), []byte("old\n"), 0600)
 	git("add", ".")
 	git("commit", "-qm", "fixture")
 	remote := filepath.Join(root, "remotes", "acme")
@@ -97,6 +102,9 @@ func TestMountedBackgroundPublication(t *testing.T) {
 	if _, err = os.Stat(filepath.Join(path, "hello")); !os.IsNotExist(err) {
 		t.Fatalf("premature file: %v", err)
 	}
+	if entries, err := os.ReadDir(path); err != nil || len(entries) != 1 || entries[0].Name() != "NOTICE" {
+		t.Fatalf("setup directory: %v %v", entries, err)
+	}
 	os.WriteFile(gate, nil, 0600)
 	deadline = time.Now().Add(15 * time.Second)
 	for {
@@ -124,6 +132,18 @@ func TestMountedBackgroundPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(originalDir)
+	endpoint, err := control.Discover(path)
+	if err != nil || endpoint != "fuse:"+filepath.Join(path, control.ControlFileName) {
+		t.Fatalf("mount-local command endpoint %q: %v", endpoint, err)
+	}
+	// An unprivileged caller may be rejected by kernel permissions before the
+	// request reaches the server's EROFS response. Both must leave the file intact.
+	if err := os.Remove(filepath.Join(path, "hello")); !errors.Is(err, syscall.EROFS) && !errors.Is(err, syscall.EACCES) {
+		t.Fatalf("unlink must remain read-only: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(path, "hello")); err != nil {
+		t.Fatalf("failed unlink lost the file: %v", err)
+	}
 	var log, logErrors bytes.Buffer
 	if err := controlcli.Run(t.Context(), []string{"log", "--oneline", "-n", "1"}, &log, &logErrors); err != nil {
 		t.Fatal(err)
@@ -132,38 +152,8 @@ func TestMountedBackgroundPublication(t *testing.T) {
 	if strings.TrimSpace(log.String()) != expectedLog {
 		t.Fatalf("mounted log: %q != %q", log.String(), expectedLog)
 	}
-	// Exercise ordinary Git through FUSE, including its pack/index mmap path.
-	native := exec.CommandContext(t.Context(), "git", "-C", path, "log")
-	native.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat")
-	started := time.Now()
-	nativeOut, nativeErr := native.CombinedOutput()
-	if nativeErr != nil {
-		t.Fatalf("native git log: %v: %s", nativeErr, nativeOut)
-	}
-	if strings.TrimSpace(string(nativeOut)) != git("log") {
-		t.Fatalf("native Git output differs: %s", nativeOut)
-	}
-	if elapsed := time.Since(started); elapsed > time.Second {
-		t.Logf("OVER 1s: native git log: %s", elapsed)
-	}
-	for _, args := range [][]string{{"status"}, {"status", "--porcelain"}, {"show", "HEAD"}, {"diff"}, {"blame", "hello"}} {
-		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", path}, args...)...)
-		cmd.Env = native.Env
-		started := time.Now()
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("native git %v: %v: %s", args, err, out)
-		}
-		if len(args) == 1 && args[0] == "status" {
-			if !strings.Contains(string(out), "working tree clean") {
-				t.Fatalf("status: %s", out)
-			}
-		} else if strings.TrimSpace(string(out)) != git(args...) {
-			t.Fatalf("native git %v differs: %s", args, out)
-		}
-		if elapsed := time.Since(started); elapsed > time.Second {
-			t.Logf("OVER 1s: native git %v: %s", args, elapsed)
-		}
+	if _, err := os.Stat(filepath.Join(path, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected virtual Git directory: %v", err)
 	}
 	after, err := os.Stat(path)
 	if err != nil || !os.SameFile(before, after) {
@@ -174,5 +164,43 @@ func TestMountedBackgroundPublication(t *testing.T) {
 	}
 	if err = os.WriteFile(filepath.Join(path, "new"), []byte("bad"), 0600); err == nil {
 		t.Fatal("mount accepted a write")
+	}
+	// Populate kernel directory caches before changing both root and subtree.
+	for _, dir := range []string{path, filepath.Join(path, "sub")} {
+		for i := 0; i < 2; i++ {
+			if _, err := os.ReadDir(dir); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	oldFile, err := os.Open(filepath.Join(path, "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer oldFile.Close()
+	os.WriteFile(filepath.Join(source, "hello"), []byte("new contents\n"), 0600)
+	os.WriteFile(filepath.Join(source, "added"), []byte("new\n"), 0600)
+	os.Remove(filepath.Join(source, "sub", "removed"))
+	os.WriteFile(filepath.Join(source, "sub", "added"), []byte("new\n"), 0600)
+	git("add", "-A")
+	git("commit", "-qm", "update fixture")
+	git("push", "--quiet", filepath.Join(remote, "project.git"), "main")
+	var updated, updateErrors bytes.Buffer
+	if err := controlcli.Run(t.Context(), []string{"update"}, &updated, &updateErrors); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(path, "sub"))
+	if err != nil || len(entries) != 1 || entries[0].Name() != "added" {
+		t.Fatalf("cached subtree survived update: %v %v", entries, err)
+	}
+	if _, err := os.Stat(filepath.Join(path, "added")); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(path, "hello")); err != nil || string(b) != "new contents\n" {
+		t.Fatalf("new open after update: %q %v", b, err)
+	}
+	b := make([]byte, 6)
+	if _, err := oldFile.ReadAt(b, 0); err != nil || string(b) != "ready\n" {
+		t.Fatalf("existing file handle changed snapshot: %q %v", b, err)
 	}
 }

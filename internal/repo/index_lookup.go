@@ -6,10 +6,11 @@ import (
 	"sort"
 	"unicode/utf8"
 
-	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
 	storagev1 "gyit/internal/gen/gyit/storage/v1"
 	"gyit/internal/store"
+
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 )
 
 // lookupIndexPage searches the immutable protobuf in place. Stack-resident

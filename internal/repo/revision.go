@@ -27,7 +27,7 @@ func (r *Repository) OpenRevision(ctx context.Context, revision, current string)
 
 // OpenRevisions pins all endpoints to one publication, even during an import.
 func (r *Repository) OpenRevisions(ctx context.Context, revisions []string, current string) ([]*Snapshot, error) {
-	m, _, err := readHead(ctx, r.store)
+	m, err := r.queryManifest(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -50,10 +50,7 @@ func (r *Repository) openRevision(ctx context.Context, m manifest, revision, cur
 		return nil, invalidRevision("reflogs, ranges, message searches and path selectors are not supported")
 	}
 	var err error
-	objects := &index{store: r.store, cache: r.cache, root: m.Root, blobRoot: m.Blobs}
-	if err := r.bindGlobalIndex(ctx, m, objects); err != nil {
-		return nil, err
-	}
+	objects := r.progressive.historyIndex()
 	refs := &index{store: r.store, cache: r.cache, root: m.Refs}
 	base, suffix := revision, ""
 	if pos := strings.IndexAny(revision, "^~"); pos >= 0 {
@@ -63,6 +60,9 @@ func (r *Repository) openRevision(ctx context.Context, m manifest, revision, cur
 		base = "HEAD"
 	}
 	target, err := resolveName(ctx, objects, refs, base, current, m.Format)
+	if err != nil && r.progressive.ResolveRevision != nil && (!isHexRevision(base) || len(base) < 40) {
+		target.sha, err = r.progressive.ResolveRevision(ctx, base)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (r *Repository) openRevision(ctx context.Context, m manifest, revision, cur
 			return nil, err
 		}
 	}
-	return &Snapshot{idx: objects, history: &index{store: r.store, cache: r.cache, root: m.History}, SHA: sha, Tree: object.Tree, Branch: branch, DetachedAt: label}, nil
+	return &Snapshot{progressive: r.progressive, idx: objects, SHA: sha, Tree: object.Tree, Branch: branch, DetachedAt: label}, nil
 }
 
 type revisionTarget struct{ sha, branch, label string }
@@ -177,9 +177,9 @@ func resolveName(ctx context.Context, objects, refs *index, name, current, forma
 	}
 	if len(hash) == width && isHex {
 		var o object
-		if err := objects.get(ctx, "o/"+hash, &o); err == nil {
+		if err := objects.get(ctx, "o/"+hash, &o); err == nil && o.Kind != "tag" {
 			return revisionTarget{sha: hash}, nil
-		} else if !errors.Is(err, store.ErrNotFound) {
+		} else if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return revisionTarget{}, err
 		}
 		var ref reference
@@ -216,10 +216,10 @@ func resolveName(ctx context.Context, objects, refs *index, name, current, forma
 		if err != nil {
 			return revisionTarget{}, err
 		}
-		if len(matches)+len(tags) > 1 {
+		if distinctMatches(matches, tags) > 1 {
 			return revisionTarget{}, invalidRevision("ambiguous abbreviated object ID")
 		}
-		if len(matches) == 1 {
+		if len(matches) == 1 && len(tags) == 0 {
 			return revisionTarget{sha: strings.TrimPrefix(matches[0].Key, "o/")}, nil
 		}
 		if len(tags) == 1 {
@@ -274,9 +274,33 @@ func abbreviate(ctx context.Context, objects, refs *index, sha string) (string, 
 		if err != nil {
 			return "", err
 		}
-		if len(matches)+len(tags) == 1 {
+		collision := false
+		for _, match := range matches {
+			if match.Key != "o/"+sha {
+				collision = true
+				break
+			}
+		}
+		for _, tag := range tags {
+			if tag.Key != "a/"+sha {
+				collision = true
+				break
+			}
+		}
+		if !collision {
 			return prefix, nil
 		}
 	}
 	return sha, nil
+}
+
+func distinctMatches(groups ...[]item) int {
+	seen := map[string]bool{}
+	for _, group := range groups {
+		for _, v := range group {
+			_, oid, _ := strings.Cut(v.Key, "/")
+			seen[oid] = true
+		}
+	}
+	return len(seen)
 }

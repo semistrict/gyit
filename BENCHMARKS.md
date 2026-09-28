@@ -1,4 +1,89 @@
-# Current import result
+# Performance acceptance target
+
+For every operation, compare gyit against the fastest equivalent native Git
+workflow, with a target of no more than **2× its elapsed time**. Compare the same
+revision, requested output, and starting data availability; report cold and warm
+results separately. Include acquisition time when the requested data is missing.
+Use shallow and partial fetches when they satisfy the operation instead of
+comparing a small request against an unnecessary full clone. Record commands,
+environment, bytes transferred where measurable, and output equivalence.
+Report timeouts as incomplete measurements, not completed timings. Historical
+targets and results below do not establish compliance with this target.
+
+## Accepted Linux ten-commit log result (September 27, 2026)
+
+The requested workload was changed to `gyit log --oneline -n 10`. With the real
+GCS-backed GitHub automount in a nested-KVM guest, the final three measured cold
+runs took **0.427, 0.414, and 0.418 seconds**. Paired native Git initialization,
+commit-only depth-ten fetch, and ten-line log took **0.165, 0.183, and 0.174
+seconds**, respectively: **2.58×, 2.27×, and 2.40×**. All ten output lines matched
+Git byte-for-byte. These results were explicitly accepted; they do **not** meet
+the standing 2× target. No further performance tuning is required for this task.
+
+Acquisition is included: each run restores the original snapshot-only manifest
+in an isolated test prefix, starts a fresh backend/cache/guest, and fetches
+missing commits during the timed CLI command. The already mounted snapshot and
+background history worker are retained in the workload. The baseline runs on
+the GCE host, while gyit runs in the nested guest. The regional GCS bucket and
+host are both in `us-east4` (host zone `us-east4-a`). Upstream server caches are
+uncontrolled. Successful cold results are separate from earlier timed-out runs.
+
+Warm CLI runs remain roughly **58–93 ms**, versus **3.4–3.5 ms** for host Git.
+Guest CLI startup alone measured **39–70 ms** in diagnostic runs. This overhead
+remains unresolved; the accepted cold result must not be presented as universal
+2× performance.
+
+The fixes bound foreground acquisition to commit-only shallow batches, separate
+its Git acquisition lane from background fetching, read grouped object-index
+pages through the existing bounded uncompressed disk cache, warm decoded small
+commit packs during import, and overlap immutable uploads before atomic HEAD
+publication. GCS returns the assigned CAS token without an extra HEAD read.
+A separate control-file bug caused Go's poller to wait indefinitely after an
+EAGAIN between response frames; the client now owns retries, and a real FUSE
+regression test verifies delivery across a delayed frame.
+
+Repeat the end-to-end check with `scripts/benchmark_history_nested_kvm.py` on the
+retained host, using an isolated copy of the depth-one store and restoring its
+seed HEAD only while that benchmark server is stopped. The script retains the
+strict 2× gate and therefore exits nonzero for these accepted results. It records
+full commands, timings, exact-output hashes, warm results, and startup probes.
+Artifacts are under `.build/gce-cold-investigation/git-history-comparison/`,
+notably `mounted4.txt`, `mounted5.txt`, `mounted6.txt`, and `seed-head.pb`.
+Remote copies are under `/home/ramon/history-runs/trial4` through `trial6`.
+The interactive mount uses a separate namespace and remains available.
+
+## Linux three-commit history comparison (September 27, 2026)
+
+On the retained GCE host, two fresh bare repositories fetched the mounted Linux
+revision with `git fetch --depth=3 --filter=tree:0 --no-tags origin <revision>`.
+The revision was `72d3fcf802c45d00b300f25b848a93c3a2bd7c7e`.
+Fetch plus `git log --oneline -n 3 FETCH_HEAD` took **0.183 s** and **0.148 s**;
+initialization and remote configuration add about 4 ms. Both returned the same
+three lines and stored four commit objects, with about 3 KiB of pack/index data.
+This is stored size, not a measured network-byte count. Starting instead with
+a depth-one commit-only repository, `--deepen=2 --filter=tree:0` plus the log took
+**0.498 s**, excluding the initial depth-one acquisition.
+
+The mounted gyit three-commit request was interrupted after approximately two
+minutes without completing. It therefore fails the 2× target by a wide margin;
+this is an interrupted observation, not a completed timing or an output-parity
+check. Native Git ran on the host; gyit ran through the nested guest mount and
+GCS-backed host service. These are two trials, with upstream caches uncontrolled.
+The native workflow establishes a roughly **0.30–0.37 s** initial budget for this
+small cold-history request, subject to repeated end-to-end measurement.
+
+The foreground gyit object-demand fetch currently uses `--filter=blob:none`
+without a depth bound, even for missing commit objects. That requests trees and
+can traverse much more ancestry than the requested log needs. Background history
+ingestion also shares its acquisition lock. A longer command timeout does not
+solve this acquisition problem.
+
+Raw commands and timings are retained in
+`.build/gce-cold-investigation/git-history-comparison/output.jsonl`; the bounded
+experiment script is `compare.py` in that directory. Remote artifacts remain in
+`/home/ramon/git-history-comparison-1790550657` on the retained test host.
+
+# Historical import result
 
 On September 25, 2026, the ordinary `gyit import` executable imported the complete
 cached Linux source in **90.896101 s**, with the existing demo VM running normally.

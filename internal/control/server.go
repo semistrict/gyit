@@ -17,7 +17,7 @@ const maxConnections = 16
 const historyTimeout = 5 * time.Minute
 
 func operationTimeout(req *pb.Request) time.Duration {
-	if req.GetDiff() != nil || req.GetBlame() != nil || req.GetView() != nil {
+	if req.GetLog() != nil || req.GetPathLog() != nil || req.GetHistoryLog() != nil || req.GetUpdate() != nil || req.GetDiff() != nil || req.GetBlame() != nil || req.GetView() != nil {
 		return historyTimeout
 	}
 	return requestTimeout

@@ -28,6 +28,15 @@ type remoteRepository struct {
 // A repository name is a directory only when GitHub lists it as public.
 // Existing jobs remain available if a listing expires while a mount is active.
 func (f *FS) publicRepository(ctx context.Context, t Target) error {
+	if f.preparedOnly {
+		f.mu.Lock()
+		known := f.jobs[t.Key()] != nil
+		f.mu.Unlock()
+		if known {
+			return nil
+		}
+		return syscall.ENOENT
+	}
 	if f.opts.APIBase == "" && f.opts.RemoteBase != "https://github.com" {
 		return nil
 	}
@@ -52,6 +61,18 @@ func (f *FS) publicRepository(ctx context.Context, t Target) error {
 // Directory metadata is short-lived and bounded independently of file content.
 // Listing never imports a repository or starts a preparation job.
 func (f *FS) listRepositories(ctx context.Context, owner string) ([]string, error) {
+	if f.preparedOnly {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		var names []string
+		for _, j := range f.jobs {
+			if j.target.Owner == owner {
+				names = append(names, j.target.Repository)
+			}
+		}
+		sort.Strings(names)
+		return names, nil
+	}
 	if f.opts.APIBase == "" && f.opts.RemoteBase != "https://github.com" {
 		return nil, nil
 	}
@@ -78,6 +99,14 @@ func (f *FS) listRepositories(ctx context.Context, owner string) ([]string, erro
 		}
 		f.listings[owner] = listing{names: names, err: err, expires: time.Now().Add(ttl)}
 		f.mu.Unlock()
+		f.changed(owner)
+		// A cached kernel listing must be dropped when the API listing expires,
+		// otherwise no readdir would reach this refresh path again.
+		time.AfterFunc(ttl, func() {
+			if f.ctx.Err() == nil {
+				f.changed(owner)
+			}
+		})
 		return names, err
 	})
 	select {

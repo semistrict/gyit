@@ -35,8 +35,7 @@ is rejected there. Build, signing, notarization:
 ## Quick start — Linux
 
 Needs Go 1.26.6+, Git, FUSE 3 (`/dev/fuse` and `fusermount3`, usually the
-`fuse3` package), a C compiler, and zlib headers. `CGO_ENABLED=0` gives a
-pure-Go build that uses Go's zlib instead of the system one.
+`fuse3` package). The Linux server supports a pure-Go `CGO_ENABLED=0` build.
 
 ```sh
 go build -o gyit ./cmd/gyit
@@ -69,75 +68,37 @@ API and Git transport, mainly for rate limits. Running under Lima in a VM:
 /Volumes/gyit/github.com/owner/repo@0123456789abcdef0123456789abcdef01234567/
 ```
 
-Every path is pinned to one immutable commit for the life of the mount. Two
-revisions of the same repository are two directories you can have open at once.
+Each path selects an immutable commit. Different revisions of one repository
+can be open at once. `gyit update` refreshes a branch/tag path explicitly;
+background history acquisition does not change mounted files.
 
-## The tradeoff: first access buys complete history
+## Files first, history in the background
 
-gyit is not a lazy clone, and that is the deliberate part. The first time you
-touch `owner/repo@revision`, `git ls-remote` resolves it to a commit. If a
-snapshot for that `(owner, repo, commit)` already exists, gyit reuses it without
-another fetch or import.
-Otherwise a background job fetches **complete history for every branch and tag**
-over Git's ordinary transport, refuses the result if it came back shallow, and
-imports it into gyit's own immutable on-disk format.
+The first access resolves the revision through Git, acquires shallow metadata,
+and prepares its directory listing. File contents load on demand while complete
+history is acquired in the background. Revisions share one durable object pool.
 
-Your read blocks for up to ten seconds. If setup finishes inside that window
-you just see the real files. If it doesn't, the directory contains exactly one
-file, `NOTICE` — a live progress report, so a slow setup is legible rather than
-a hang — and the whole tree appears later in a single atomic swap. A partial
-tree is never visible. If setup fails, `NOTICE` says why and stays put; `touch`
-it to retry. Two setups run at a time and the rest queue.
+Your read waits up to ten seconds for setup. If it finishes in that window, you
+see real files immediately. Otherwise a live `NOTICE` shows progress until the
+snapshot replaces it atomically. `touch NOTICE` retries failed setup.
 
-So the full fetch and import happen once per prepared commit; resolving a new
-path may still contact the remote. The filesystem is lazy: afterwards nothing
-is checked out, reading a file is a lookup into an immutable index plus a
-byte-range read from local disk, and an IDE indexing pass makes no GitHub
-requests at all. The bill arrives up front: for a repository the size of Linux,
-setup can mean minutes of fetching and tens of GB on disk, with no partial,
-blobless, or shallow mode on offer. Import timings and method — single runs on
-one machine, which do not establish general performance — are in
-[BENCHMARKS.md](BENCHMARKS.md) and [CORRECTNESS.md](CORRECTNESS.md), along with
-what is explicitly *not* measured.
+## History commands
 
-## Git history, without a checkout
-
-Plain `git log` and `git status` also work inside a prepared repository, including subdirectories.
-Each mount exposes a read-only `.git` with HEAD pinned to that mount's revision,
-refs, and native Git pack files served on demand. Archive imports share their
-existing pack bytes and additionally retain the pack index and a checkout index; conversion
-fallbacks retain a native pack separately. Existing prepared repositories need
-one fresh setup to acquire this metadata. The virtual `.git` currently targets
-read-only use; its checkout index contains stat data matching the served files.
-Status checks every tracked file and scans directories for untracked files.
-Ordinary `show`, revision-to-revision `diff`, `blame`,
-`ls-files`, `ls-tree`, `rev-parse`, `rev-list`, and branch/tag listing are tested
-against native Git too. Git writes remain unsupported.
-
-
-The mount synthesizes a `user.gyit.control` xattr at each repository root; the
-CLI walks up to it and speaks protobuf over the private endpoint it names, so
-there is no daemon to configure. History commands work from anywhere in the tree,
-against the pinned commit, with no second copy and no Git binary on the reader:
+Run these inside a mounted repository:
 
 ```sh
-cd /Volumes/gyit/github.com/torvalds/linux/kernel/sched
-gyit log --oneline -n 20 -- core.c
-gyit log --follow -- core.c
-gyit blame -L 100,140 core.c
-gyit diff v6.11 v6.12 --name-status
-gyit grep -n 'sched_class' -- core.c
-gyit show HEAD:core.c
+gyit status
+gyit log --oneline -n 10
+gyit log --follow -- README.md
+gyit update
 ```
 
-Also present: `status`, `annotate`, `ls-tree`, `ls-files`, `cat-file`, `branch`,
-`tag`, `show-ref`, `rev-parse`, `rev-list`, `merge-base`, `shortlog`. Run `gyit`
-with no arguments for the list. Output follows Git's formats closely enough that
-a byte-for-byte parity suite compares them, and every traversal is explicitly
-bounded, so a limit produces an error rather than an approximate answer.
-`gyit switch` is refused on GitHub mounts — a path is pinned, so open a different
-`@revision` instead. Semantics, flags, and known divergences from Git:
-[OBJECT_STORE_COMMANDS.md](OBJECT_STORE_COMMANDS.md).
+The CLI discovers the mount's protobuf control endpoint by walking up from the
+current directory. If requested commits are not available yet, `gyit log`
+acquires the needed history ahead of the background job. The mount currently
+exposes status, log, and update; other history/view implementations remain
+available internally but are not exposed by the mount. Native Git commands are
+not supported: no virtual `.git` directory is created.
 
 ## What persists, and what gets thrown away
 
@@ -147,7 +108,7 @@ limit, never evicted, and deleting one costs you a re-import. The decoded cache
 shared across all repositories rather than budgeted per mount, capped at 4 GiB
 by default (`--disk-cache-mib`), LRU-evicted, and shrunk to keep 20 GiB of the
 filesystem free. Clearing it does not remove imported repositories. On-disk
-layout, indexes, and archive read recipes: [OBJECT_STORE.md](OBJECT_STORE.md).
+layout and indexes: [OBJECT_STORE.md](OBJECT_STORE.md).
 
 ## Limits
 
@@ -158,18 +119,11 @@ Plainly, because most of these will matter to you before the novelty wears off:
   `EROFS`. The one exception is `touch` on a synthetic `NOTICE` — "retry setup".
 - **Public repositories are the supported scope.** A token is read from the
   environment and passed through, but private access is not a tested path.
-- **First access is a full fetch** of all branches and tags, as above.
-- **The store can exceed the source pack.** Archive imports may preserve the
-  source pack *and* write converted fallbacks for objects that exceed native
-  read limits. There is also no garbage collection: nothing in the durable store
-  is ever reclaimed, and deleting old generations while a reader may use them
-  corrupts it.
-- **Revisions are resolved once, at setup.** A branch path is pinned to the tip
-  it had then; remount to pick up movement.
-- **Linux mounts use direct I/O with zero kernel attribute caching.** That keeps
-  content correct at stable inode numbers, but rules out file-backed `mmap`.
-  The immutable virtual `.git` files use buffered reads so native Git can mmap
-  its pack and index; other files still use direct I/O.
+- **Only SHA-1 repositories are supported.**
+- **Durable storage has no garbage collection.** Removing objects that a reader
+  may still use can corrupt that reader. The cache budget does not cap durable
+  storage.
+- **Revisions are pinned until `gyit update`.** A full commit ID never advances.
 - **Git LFS files are pointer files. Submodules are empty directories.**
   Ownership and timestamps are synthetic, names over 255 bytes are rejected, and
   inode numbers are path hashes, so collisions are theoretically possible.
@@ -178,7 +132,9 @@ Plainly, because most of these will matter to you before the novelty wears off:
   cached for five minutes. Listing an owner imports nothing; only reading inside
   a repository does.
 - It is a prototype. Git transport throttling and ordinary network failures
-  apply, and the S3-backed future of the durable store is unvalidated here.
+  apply. The app's durable store is local; a native GCS adapter and experimental
+  nested-KVM harness exercise remote storage. Cold remote scans remain slow;
+  see [scan measurements](SCAN_PERFORMANCE.md). S3 performance is unvalidated.
 
 ## Internals and development
 

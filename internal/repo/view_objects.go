@@ -63,7 +63,7 @@ func (r *Repository) resolveViewObject(ctx context.Context, current *Snapshot, p
 		if err != nil {
 			return nil, "", object{}, err
 		}
-		if s.idx.blobRoot != (pageRef{}) && (e.Mode == 0100644 || e.Mode == 0100755 || e.Mode == 0120000) {
+		if e.Mode == 0100644 || e.Mode == 0100755 || e.Mode == 0120000 {
 			return s, e.OID, object{Kind: "blob", Size: e.Size}, nil
 		}
 		var o object
@@ -82,14 +82,11 @@ func (r *Repository) resolveViewObject(ctx context.Context, current *Snapshot, p
 	for strings.HasSuffix(selector, "^{}") {
 		selector = strings.TrimSuffix(selector, "^{}")
 	}
-	m, _, err := readHead(ctx, r.store)
+	m, err := r.queryManifest(ctx)
 	if err != nil {
 		return nil, "", object{}, err
 	}
-	idx := &index{store: r.store, cache: r.cache, root: m.Root, blobRoot: m.Blobs}
-	if err := r.bindGlobalIndex(ctx, m, idx); err != nil {
-		return nil, "", object{}, err
-	}
+	idx := r.progressive.historyIndex()
 	refs := &index{store: r.store, cache: r.cache, root: m.Refs}
 	var oid string
 	// Preserve annotated tag identity for object inspection; the revision
@@ -113,7 +110,7 @@ func (r *Repository) resolveViewObject(ctx context.Context, current *Snapshot, p
 				original = strings.TrimPrefix(key, "a/")
 			}
 			if original != "" && original != ref.Commit {
-				return &Snapshot{idx: idx, SHA: ref.Commit, Tree: current.Tree}, original, object{Kind: "tag", Size: -1}, nil
+				return &Snapshot{progressive: r.progressive, idx: idx, SHA: ref.Commit, Tree: current.Tree}, original, object{Kind: "tag", Size: -1}, nil
 			}
 			if original == "" && strings.HasPrefix(key, "r/refs/tags/") {
 				return nil, "", object{}, fmt.Errorf("tag object identity is missing; re-import to upgrade this store")
@@ -143,7 +140,7 @@ func (r *Repository) resolveViewObject(ctx context.Context, current *Snapshot, p
 					return nil, "", object{}, e
 				}
 				if len(tags) == 1 {
-					return &Snapshot{idx: idx, SHA: oid, Tree: current.Tree}, strings.TrimPrefix(tags[0].Key, "a/"), object{Kind: "tag", Size: -1}, nil
+					return &Snapshot{progressive: r.progressive, idx: idx, SHA: oid, Tree: current.Tree}, strings.TrimPrefix(tags[0].Key, "a/"), object{Kind: "tag", Size: -1}, nil
 				}
 			}
 		}
@@ -162,7 +159,7 @@ func (r *Repository) resolveViewObject(ctx context.Context, current *Snapshot, p
 	if blob && o.Kind != "blob" {
 		return nil, "", object{}, fmt.Errorf("object is not a blob")
 	}
-	s := &Snapshot{idx: idx, SHA: current.SHA, Tree: current.Tree}
+	s := &Snapshot{progressive: r.progressive, idx: idx, SHA: current.SHA, Tree: current.Tree}
 	if o.Kind == "commit" {
 		s.SHA, s.Tree = oid, o.Tree
 	}
@@ -560,46 +557,12 @@ func (r *viewBlobReader) Read(p []byte) (int, error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
-	if len(p) == 0 {
-		return 0, nil
-	}
 	if r.off >= r.size {
 		return 0, io.EOF
 	}
-	part := r.off / ChunkSize
-	if r.data == nil || r.part != part {
-		var c chunk
-		if r.s.idx.blobRoot == (pageRef{}) {
-			if err := r.s.idx.get(r.ctx, chunkKey(r.oid, part), &c); err != nil {
-				return 0, err
-			}
-		} else {
-			size, found, err := r.s.readBlobPart(r.ctx, r.oid, part)
-			if err != nil {
-				return 0, err
-			}
-			if size != r.size {
-				return 0, fmt.Errorf("inconsistent stream blob size")
-			}
-			c = found
-		}
-		if c.ArchiveRecipe != "" {
-			if _, err := checkedArchiveBlob(c, r.oid, r.size, part); err != nil {
-				return 0, err
-			}
-		}
-		data, err := r.s.readChunk(r.ctx, c)
-		if err != nil {
-			return 0, err
-		}
-		if int64(len(data)) != min(int64(ChunkSize), r.size-part*ChunkSize) {
-			return 0, fmt.Errorf("invalid chunk size")
-		}
-		r.data, r.part = data, part
-	}
-	n := copy(p, r.data[r.off%ChunkSize:])
+	n, err := r.s.ReadAt(r.ctx, r.oid, p[:min(int64(len(p)), r.size-r.off)], r.off)
 	r.off += int64(n)
-	return n, nil
+	return n, err
 }
 
 // basicViewRegex translates the POSIX basic operators to RE2 syntax. Backrefs

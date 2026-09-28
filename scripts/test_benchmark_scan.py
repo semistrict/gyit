@@ -7,10 +7,41 @@ import sys
 import tempfile
 import unittest
 
-from benchmark_scan import scan
+from benchmark_scan import scan, find_scan
 
 
 class ScanTest(unittest.TestCase):
+    def test_find_rejects_matches_and_git_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'sub').mkdir()
+            (root / 'sub' / '.hidden').write_text('scanned')
+            self.assertGreater(find_scan(root)['seconds'], 0)
+            (root / 'sub' / 'DOES_NOT_EXIST').touch()
+            with self.assertRaisesRegex(ValueError, 'no matches'):
+                find_scan(root)
+            (root / '.git').mkdir()
+            with self.assertRaisesRegex(ValueError, 'without root .git'):
+                find_scan(root)
+
+    def test_find_verifies_tree_after_timing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            a, b = root / 'a', root / 'b'
+            a.mkdir()
+            b.mkdir()
+            for tree in (a, b):
+                (tree / '.hidden').write_text('same')
+            command = [sys.executable, str(Path(__file__).with_name('benchmark_scan.py')),
+                       '--mount', str(a), '--checkout', str(b), '--mode', 'find',
+                       '--runs', '2', '--max-ratio', '1000000']
+            result = subprocess.run(command, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            (b / '.hidden').write_text('different size')
+            result = subprocess.run(command, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b'traversal differs', result.stderr)
+
     def test_complete_walk_and_stat(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

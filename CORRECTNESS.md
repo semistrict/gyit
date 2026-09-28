@@ -1,5 +1,10 @@
 # Ordinary-build integration verification — September 25, 2026
 
+> Historical notes for the retired storage implementation. Its compatibility
+> readers, importer, and format-specific verification harnesses have been removed.
+> Current storage is documented in [OBJECT_STORE.md](OBJECT_STORE.md); current
+> checks are `go test ./...` and the progressive tests in `internal/repo/`.
+
 The archive importer and readers are now part of the normal source tree.
 `go build ./cmd/gyit` includes them without overlays or experimental environment
 switches. Qualified sources automatically use archive import and publish format
@@ -190,7 +195,7 @@ actual built `gyit import` command, kills its process group after 180 seconds,
 and follows successful publication with independent core verification. Every
 read phase also has a watchdog; timeout, incomplete reports, leftover process
 groups, or residual scratch are failures. Reports and failed stores are retained.
-See [scripts/VERIFY_LINUX.md](scripts/VERIFY_LINUX.md) for adopting existing facts,
+See the retired Linux verification notes for adopting existing facts,
 selecting other paths, and running the two-mount verifier with an ordinary Linux
 binary and independently prepared oracle.
 

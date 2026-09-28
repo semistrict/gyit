@@ -34,13 +34,17 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return runLog(ctx, args[1:], out, stderr)
 		})
 	}
-	if len(args) == 0 || (args[0] != "status" && args[0] != "switch") {
-		return fmt.Errorf("usage: gyit <status|switch|checkout|log|diff|blame|annotate> [--socket PATH] [REVISION]")
+	if len(args) == 0 || (args[0] != "status" && args[0] != "switch" && args[0] != "update") {
+		return fmt.Errorf("usage: gyit <update|status|switch|checkout|log|diff|blame|annotate> [--socket PATH] [REVISION]")
 	}
 	f := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	f.SetOutput(stderr)
 	socket := f.String("socket", "", "mount control socket (default: discover from current directory)")
-	timeout := f.Duration("timeout", 35*time.Second, "maximum time to wait for a response")
+	defaultTimeout := 35 * time.Second
+	if args[0] == "update" {
+		defaultTimeout = 5 * time.Minute
+	}
+	timeout := f.Duration("timeout", defaultTimeout, "maximum time to wait for a response")
 	var short, branch, zero bool
 	var porcelain string
 	if args[0] == "status" {
@@ -80,8 +84,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if *timeout <= 0 {
 		return fmt.Errorf("--timeout must be positive")
 	}
-	if args[0] == "status" && f.NArg() != 0 {
-		return fmt.Errorf("status takes no revision")
+	if (args[0] == "status" || args[0] == "update") && f.NArg() != 0 {
+		return fmt.Errorf("%s takes no revision", args[0])
 	}
 	if args[0] == "switch" {
 		if f.NArg() == 1 && sha == "" {
@@ -108,6 +112,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	var err error
 	if args[0] == "status" {
 		s, err = client.Status(ctx)
+	} else if args[0] == "update" {
+		s, err = client.Update(ctx)
 	} else {
 		s, err = client.Switch(ctx, sha)
 	}

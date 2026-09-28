@@ -8,9 +8,10 @@ import (
 	"runtime"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
 	"gyit/internal/control"
 	pb "gyit/internal/gen/gyit/control/v1"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Endpoint advertises the existing protobuf command service only at a
@@ -29,10 +30,6 @@ func (f *FS) Endpoint(ctx context.Context, path string) ([]byte, error) {
 	if f.closed {
 		return nil, os.ErrClosed
 	}
-	snap, notice, _ := j.status()
-	if snap == nil {
-		return nil, fmt.Errorf("repository is not ready: %s", notice)
-	}
 	if j.control == nil {
 		if f.controlDir == "" {
 			f.controlDir, err = os.MkdirTemp(f.controlParent(), "gy-")
@@ -50,12 +47,34 @@ func (f *FS) Endpoint(ctx context.Context, path string) ([]byte, error) {
 		if err := os.Remove(endpoint); err != nil {
 			return nil, err
 		}
-		controller := control.New(j.repository, snap)
 		server, err := control.ListenStream(f.ctx, endpoint, func(ctx context.Context, req *pb.Request, send func(*pb.Response) error) error {
-			if req.GetSwitch() != nil {
-				return send(&pb.Response{Version: control.Version, Result: &pb.Response_Error{Error: &pb.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "GitHub mounts pin a revision; open a different @revision path to change versions"}}})
+			if req.Version != control.Version {
+				return send(commandError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED_VERSION, "unsupported control protocol version"))
 			}
-			return controller.Serve(ctx, req, send)
+			current, notice, _ := j.status()
+			if current == nil {
+				return send(commandError(pb.ErrorCode_ERROR_CODE_INTERNAL, fmt.Sprintf("repository is not ready: %s", strings.TrimSpace(notice))))
+			}
+			j.mu.RLock()
+			progressive := j.progressive
+			j.mu.RUnlock()
+			repository := progressive.HistoryRepository()
+			if req.GetUpdate() != nil {
+				next, err := f.update(ctx, j)
+				if err != nil {
+					return send(commandError(pb.ErrorCode_ERROR_CODE_INTERNAL, f.redact(err.Error())))
+				}
+				return send(commandSnapshot(next))
+			}
+			if req.GetLog() != nil || req.GetPathLog() != nil || req.GetHistoryLog() != nil {
+				current, _, _ := j.status()
+				return control.New(repository, current).Serve(ctx, req, send)
+			}
+			if req.GetStatus() != nil {
+				current, _, _ := j.status()
+				return send(commandSnapshot(current))
+			}
+			return send(commandError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "this command is not yet supported by mounts; file browsing, gyit log and gyit update are available"))
 		})
 		if err != nil {
 			return nil, err

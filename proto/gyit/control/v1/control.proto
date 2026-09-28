@@ -19,10 +19,14 @@ message Request {
     // Pathspec/follow semantics must be rejected by older servers.
     LogRequest history_log = 8;
     ViewRequest view = 9;
+    UpdateRequest update = 10;
   }
 }
 
 message StatusRequest {}
+
+// Resolve the mounted branch/tag again; commit identifiers remain pinned.
+message UpdateRequest {}
 
 message SwitchRequest {
   // Legacy full commit ID; new clients use revision.
@@ -89,6 +93,8 @@ message LogRequest {
   bytes possible_path = 5;
   bool follow = 6;
   bytes path_prefix = 7;
+  // Normal log displays full commit IDs; avoid unused abbreviation lookups.
+  bool full_commit_ids = 8;
 }
 
 message LogEntry {

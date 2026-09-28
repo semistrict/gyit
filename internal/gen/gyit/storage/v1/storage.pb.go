@@ -73,298 +73,6 @@ func (ObjectKind) EnumDescriptor() ([]byte, []int) {
 	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{0}
 }
 
-// Manifest is stored in HEAD and under its content hash in generations/.
-// Version 6 adds independently compressed, shared directory pages.
-// Version 7 adds a direct blob index. Version 8 adds native source archives
-// and a global blob-size table referenced by the main index.
-type Manifest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Version        uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Format         string                 `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"`
-	RootPage       *PageReference         `protobuf:"bytes,5,opt,name=root_page,json=rootPage,proto3" json:"root_page,omitempty"`
-	Tips           []string               `protobuf:"bytes,4,rep,name=tips,proto3" json:"tips,omitempty"`
-	Refs           *PageReference         `protobuf:"bytes,6,opt,name=refs,proto3" json:"refs,omitempty"`
-	RevisionGraph  bool                   `protobuf:"varint,7,opt,name=revision_graph,json=revisionGraph,proto3" json:"revision_graph,omitempty"`
-	RefsHash       string                 `protobuf:"bytes,8,opt,name=refs_hash,json=refsHash,proto3" json:"refs_hash,omitempty"`
-	CommitMetadata bool                   `protobuf:"varint,9,opt,name=commit_metadata,json=commitMetadata,proto3" json:"commit_metadata,omitempty"`
-	// Optional immutable acceleration index; older readers can ignore it.
-	History      *PageReference `protobuf:"bytes,10,opt,name=history,proto3" json:"history,omitempty"`
-	HistoryCount uint64         `protobuf:"varint,11,opt,name=history_count,json=historyCount,proto3" json:"history_count,omitempty"`
-	// Optional direct blob index, keyed by binary object ID and chunk number.
-	Blobs         *PageReference `protobuf:"bytes,12,opt,name=blobs,proto3" json:"blobs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Manifest) Reset() {
-	*x = Manifest{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Manifest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Manifest) ProtoMessage() {}
-
-func (x *Manifest) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Manifest.ProtoReflect.Descriptor instead.
-func (*Manifest) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *Manifest) GetVersion() uint32 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
-func (x *Manifest) GetFormat() string {
-	if x != nil {
-		return x.Format
-	}
-	return ""
-}
-
-func (x *Manifest) GetRootPage() *PageReference {
-	if x != nil {
-		return x.RootPage
-	}
-	return nil
-}
-
-func (x *Manifest) GetTips() []string {
-	if x != nil {
-		return x.Tips
-	}
-	return nil
-}
-
-func (x *Manifest) GetRefs() *PageReference {
-	if x != nil {
-		return x.Refs
-	}
-	return nil
-}
-
-func (x *Manifest) GetRevisionGraph() bool {
-	if x != nil {
-		return x.RevisionGraph
-	}
-	return false
-}
-
-func (x *Manifest) GetRefsHash() string {
-	if x != nil {
-		return x.RefsHash
-	}
-	return ""
-}
-
-func (x *Manifest) GetCommitMetadata() bool {
-	if x != nil {
-		return x.CommitMetadata
-	}
-	return false
-}
-
-func (x *Manifest) GetHistory() *PageReference {
-	if x != nil {
-		return x.History
-	}
-	return nil
-}
-
-func (x *Manifest) GetHistoryCount() uint64 {
-	if x != nil {
-		return x.HistoryCount
-	}
-	return 0
-}
-
-func (x *Manifest) GetBlobs() *PageReference {
-	if x != nil {
-		return x.Blobs
-	}
-	return nil
-}
-
-// Dense topological positions let blame traverse parents within fetched blocks.
-// IDs start at one; each block contains at most 256 positions. Published partial
-// blocks are never extended; the next publication starts at a new block boundary.
-type HistoryPosition struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Position      uint64                 `protobuf:"varint,1,opt,name=position,proto3" json:"position,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HistoryPosition) Reset() {
-	*x = HistoryPosition{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HistoryPosition) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HistoryPosition) ProtoMessage() {}
-
-func (x *HistoryPosition) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HistoryPosition.ProtoReflect.Descriptor instead.
-func (*HistoryPosition) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *HistoryPosition) GetPosition() uint64 {
-	if x != nil {
-		return x.Position
-	}
-	return 0
-}
-
-type HistoryBlock struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commits       []*HistoryCommit       `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HistoryBlock) Reset() {
-	*x = HistoryBlock{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HistoryBlock) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HistoryBlock) ProtoMessage() {}
-
-func (x *HistoryBlock) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HistoryBlock.ProtoReflect.Descriptor instead.
-func (*HistoryBlock) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *HistoryBlock) GetCommits() []*HistoryCommit {
-	if x != nil {
-		return x.Commits
-	}
-	return nil
-}
-
-type HistoryCommit struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Oid     []byte                 `protobuf:"bytes,1,opt,name=oid,proto3" json:"oid,omitempty"`
-	Tree    []byte                 `protobuf:"bytes,2,opt,name=tree,proto3" json:"tree,omitempty"`
-	Parents []uint64               `protobuf:"varint,3,rep,packed,name=parents,proto3" json:"parents,omitempty"`
-	// 512 bits, four probes from SHA-256(path), relative to the first parent.
-	// A negative proves unchanged; positives always require an exact tree lookup.
-	ChangedPaths  []byte `protobuf:"bytes,4,opt,name=changed_paths,json=changedPaths,proto3" json:"changed_paths,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HistoryCommit) Reset() {
-	*x = HistoryCommit{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HistoryCommit) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HistoryCommit) ProtoMessage() {}
-
-func (x *HistoryCommit) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HistoryCommit.ProtoReflect.Descriptor instead.
-func (*HistoryCommit) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *HistoryCommit) GetOid() []byte {
-	if x != nil {
-		return x.Oid
-	}
-	return nil
-}
-
-func (x *HistoryCommit) GetTree() []byte {
-	if x != nil {
-		return x.Tree
-	}
-	return nil
-}
-
-func (x *HistoryCommit) GetParents() []uint64 {
-	if x != nil {
-		return x.Parents
-	}
-	return nil
-}
-
-func (x *HistoryCommit) GetChangedPaths() []byte {
-	if x != nil {
-		return x.ChangedPaths
-	}
-	return nil
-}
-
-// IndexPage is either a sorted leaf or an internal routing page.
 type IndexPage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*IndexItem           `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -375,7 +83,7 @@ type IndexPage struct {
 
 func (x *IndexPage) Reset() {
 	*x = IndexPage{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[4]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -387,7 +95,7 @@ func (x *IndexPage) String() string {
 func (*IndexPage) ProtoMessage() {}
 
 func (x *IndexPage) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[4]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -400,7 +108,7 @@ func (x *IndexPage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexPage.ProtoReflect.Descriptor instead.
 func (*IndexPage) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{4}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *IndexPage) GetItems() []*IndexItem {
@@ -420,10 +128,7 @@ func (x *IndexPage) GetChildren() []*IndexChild {
 type IndexItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// The key prefix determines the protobuf message type:
-	// o/ = ObjectRecord, p/ = ParentRecord, c/ = CommitRecord, t/ = DirectoryEntry,
-	// b/ and legacy a/ = ChunkRecord, a5/ = AnchorRecord.
-	// In the separate refs index, r/ and a/ = ReferenceRecord.
+	// Typed protobuf value; the index namespace determines its message type.
 	Value         []byte `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -431,7 +136,7 @@ type IndexItem struct {
 
 func (x *IndexItem) Reset() {
 	*x = IndexItem{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[5]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -443,7 +148,7 @@ func (x *IndexItem) String() string {
 func (*IndexItem) ProtoMessage() {}
 
 func (x *IndexItem) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[5]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -456,7 +161,7 @@ func (x *IndexItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexItem.ProtoReflect.Descriptor instead.
 func (*IndexItem) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{5}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *IndexItem) GetKey() string {
@@ -483,7 +188,7 @@ type IndexChild struct {
 
 func (x *IndexChild) Reset() {
 	*x = IndexChild{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[6]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -495,7 +200,7 @@ func (x *IndexChild) String() string {
 func (*IndexChild) ProtoMessage() {}
 
 func (x *IndexChild) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[6]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -508,7 +213,7 @@ func (x *IndexChild) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexChild.ProtoReflect.Descriptor instead.
 func (*IndexChild) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{6}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *IndexChild) GetMaxKey() string {
@@ -525,7 +230,6 @@ func (x *IndexChild) GetPage() *PageReference {
 	return nil
 }
 
-// An independently verifiable page range inside an immutable index pack.
 type PageReference struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pack          string                 `protobuf:"bytes,1,opt,name=pack,proto3" json:"pack,omitempty"`
@@ -538,7 +242,7 @@ type PageReference struct {
 
 func (x *PageReference) Reset() {
 	*x = PageReference{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[7]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -550,7 +254,7 @@ func (x *PageReference) String() string {
 func (*PageReference) ProtoMessage() {}
 
 func (x *PageReference) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[7]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -563,7 +267,7 @@ func (x *PageReference) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PageReference.ProtoReflect.Descriptor instead.
 func (*PageReference) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{7}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *PageReference) GetPack() string {
@@ -595,19 +299,17 @@ func (x *PageReference) GetHash() string {
 }
 
 type ObjectRecord struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Kind  ObjectKind             `protobuf:"varint,1,opt,name=kind,proto3,enum=gyit.storage.v1.ObjectKind" json:"kind,omitempty"`
-	Size  int64                  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
-	Tree  string                 `protobuf:"bytes,3,opt,name=tree,proto3" json:"tree,omitempty"`
-	// Absent in older stores, whose entries reside in the global t/ index.
-	Directory     *PageReference `protobuf:"bytes,4,opt,name=directory,proto3" json:"directory,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          ObjectKind             `protobuf:"varint,1,opt,name=kind,proto3,enum=gyit.storage.v1.ObjectKind" json:"kind,omitempty"`
+	Size          int64                  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	Tree          string                 `protobuf:"bytes,3,opt,name=tree,proto3" json:"tree,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ObjectRecord) Reset() {
 	*x = ObjectRecord{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[8]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -619,7 +321,7 @@ func (x *ObjectRecord) String() string {
 func (*ObjectRecord) ProtoMessage() {}
 
 func (x *ObjectRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[8]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -632,7 +334,7 @@ func (x *ObjectRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectRecord.ProtoReflect.Descriptor instead.
 func (*ObjectRecord) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{8}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ObjectRecord) GetKind() ObjectKind {
@@ -656,143 +358,6 @@ func (x *ObjectRecord) GetTree() string {
 	return ""
 }
 
-func (x *ObjectRecord) GetDirectory() *PageReference {
-	if x != nil {
-		return x.Directory
-	}
-	return nil
-}
-
-// Each page contains at most 128 entries or children, sorted by raw name bytes.
-// Pages are individually Zstandard-compressed and shared across tree versions.
-type DirectoryPage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entries       []*NamedEntry          `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
-	Children      []*DirectoryChild      `protobuf:"bytes,2,rep,name=children,proto3" json:"children,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DirectoryPage) Reset() {
-	*x = DirectoryPage{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DirectoryPage) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectoryPage) ProtoMessage() {}
-
-func (x *DirectoryPage) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectoryPage.ProtoReflect.Descriptor instead.
-func (*DirectoryPage) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *DirectoryPage) GetEntries() []*NamedEntry {
-	if x != nil {
-		return x.Entries
-	}
-	return nil
-}
-
-func (x *DirectoryPage) GetChildren() []*DirectoryChild {
-	if x != nil {
-		return x.Children
-	}
-	return nil
-}
-
-type NamedEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          []byte                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Oid           []byte                 `protobuf:"bytes,2,opt,name=oid,proto3" json:"oid,omitempty"`
-	Mode          uint32                 `protobuf:"varint,3,opt,name=mode,proto3" json:"mode,omitempty"`
-	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	RawMode       uint32                 `protobuf:"varint,5,opt,name=raw_mode,json=rawMode,proto3" json:"raw_mode,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NamedEntry) Reset() {
-	*x = NamedEntry{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NamedEntry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NamedEntry) ProtoMessage() {}
-
-func (x *NamedEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NamedEntry.ProtoReflect.Descriptor instead.
-func (*NamedEntry) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *NamedEntry) GetName() []byte {
-	if x != nil {
-		return x.Name
-	}
-	return nil
-}
-
-func (x *NamedEntry) GetOid() []byte {
-	if x != nil {
-		return x.Oid
-	}
-	return nil
-}
-
-func (x *NamedEntry) GetMode() uint32 {
-	if x != nil {
-		return x.Mode
-	}
-	return 0
-}
-
-func (x *NamedEntry) GetSize() int64 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *NamedEntry) GetRawMode() uint32 {
-	if x != nil {
-		return x.RawMode
-	}
-	return 0
-}
-
 type DirectoryChild struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MaxName       []byte                 `protobuf:"bytes,1,opt,name=max_name,json=maxName,proto3" json:"max_name,omitempty"`
@@ -803,7 +368,7 @@ type DirectoryChild struct {
 
 func (x *DirectoryChild) Reset() {
 	*x = DirectoryChild{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[11]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -815,7 +380,7 @@ func (x *DirectoryChild) String() string {
 func (*DirectoryChild) ProtoMessage() {}
 
 func (x *DirectoryChild) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[11]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -828,7 +393,7 @@ func (x *DirectoryChild) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryChild.ProtoReflect.Descriptor instead.
 func (*DirectoryChild) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{11}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DirectoryChild) GetMaxName() []byte {
@@ -845,7 +410,6 @@ func (x *DirectoryChild) GetPage() *PageReference {
 	return nil
 }
 
-// Names are encoded in index keys, preserving non-UTF-8 filename bytes.
 type DirectoryEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Oid   string                 `protobuf:"bytes,1,opt,name=oid,proto3" json:"oid,omitempty"`
@@ -859,7 +423,7 @@ type DirectoryEntry struct {
 
 func (x *DirectoryEntry) Reset() {
 	*x = DirectoryEntry{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[12]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -871,7 +435,7 @@ func (x *DirectoryEntry) String() string {
 func (*DirectoryEntry) ProtoMessage() {}
 
 func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[12]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -884,7 +448,7 @@ func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryEntry.ProtoReflect.Descriptor instead.
 func (*DirectoryEntry) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{12}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DirectoryEntry) GetOid() string {
@@ -915,328 +479,6 @@ func (x *DirectoryEntry) GetRawMode() uint32 {
 	return 0
 }
 
-// A dependency range and its optional parent. Chains end at a full frame.
-type ChunkBase struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Pack          string                 `protobuf:"bytes,1,opt,name=pack,proto3" json:"pack,omitempty"`
-	Offset        int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Length        int64                  `protobuf:"varint,3,opt,name=length,proto3" json:"length,omitempty"`
-	Hash          string                 `protobuf:"bytes,4,opt,name=hash,proto3" json:"hash,omitempty"`
-	Base          *ChunkBase             `protobuf:"bytes,5,opt,name=base,proto3" json:"base,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ChunkBase) Reset() {
-	*x = ChunkBase{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ChunkBase) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ChunkBase) ProtoMessage() {}
-
-func (x *ChunkBase) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ChunkBase.ProtoReflect.Descriptor instead.
-func (*ChunkBase) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *ChunkBase) GetPack() string {
-	if x != nil {
-		return x.Pack
-	}
-	return ""
-}
-
-func (x *ChunkBase) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *ChunkBase) GetLength() int64 {
-	if x != nil {
-		return x.Length
-	}
-	return 0
-}
-
-func (x *ChunkBase) GetHash() string {
-	if x != nil {
-		return x.Hash
-	}
-	return ""
-}
-
-func (x *ChunkBase) GetBase() *ChunkBase {
-	if x != nil {
-		return x.Base
-	}
-	return nil
-}
-
-type AnchorRecord struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Candidates    []*ChunkBase           `protobuf:"bytes,1,rep,name=candidates,proto3" json:"candidates,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AnchorRecord) Reset() {
-	*x = AnchorRecord{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AnchorRecord) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AnchorRecord) ProtoMessage() {}
-
-func (x *AnchorRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AnchorRecord.ProtoReflect.Descriptor instead.
-func (*AnchorRecord) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *AnchorRecord) GetCandidates() []*ChunkBase {
-	if x != nil {
-		return x.Candidates
-	}
-	return nil
-}
-
-type ChunkDelta struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Size          uint32                 `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
-	Operations    []*DeltaOperation      `protobuf:"bytes,2,rep,name=operations,proto3" json:"operations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ChunkDelta) Reset() {
-	*x = ChunkDelta{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ChunkDelta) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ChunkDelta) ProtoMessage() {}
-
-func (x *ChunkDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ChunkDelta.ProtoReflect.Descriptor instead.
-func (*ChunkDelta) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *ChunkDelta) GetSize() uint32 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *ChunkDelta) GetOperations() []*DeltaOperation {
-	if x != nil {
-		return x.Operations
-	}
-	return nil
-}
-
-type DeltaOperation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Offset        uint32                 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
-	Length        uint32                 `protobuf:"varint,2,opt,name=length,proto3" json:"length,omitempty"`
-	Literal       []byte                 `protobuf:"bytes,3,opt,name=literal,proto3" json:"literal,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeltaOperation) Reset() {
-	*x = DeltaOperation{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeltaOperation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeltaOperation) ProtoMessage() {}
-
-func (x *DeltaOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeltaOperation.ProtoReflect.Descriptor instead.
-func (*DeltaOperation) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *DeltaOperation) GetOffset() uint32 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *DeltaOperation) GetLength() uint32 {
-	if x != nil {
-		return x.Length
-	}
-	return 0
-}
-
-func (x *DeltaOperation) GetLiteral() []byte {
-	if x != nil {
-		return x.Literal
-	}
-	return nil
-}
-
-type ChunkRecord struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Pack   string                 `protobuf:"bytes,1,opt,name=pack,proto3" json:"pack,omitempty"`
-	Offset int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Length int64                  `protobuf:"varint,3,opt,name=length,proto3" json:"length,omitempty"`
-	Hash   string                 `protobuf:"bytes,4,opt,name=hash,proto3" json:"hash,omitempty"`
-	// When present, the payload is a Zstandard-compressed ChunkDelta.
-	Base *ChunkBase `protobuf:"bytes,5,opt,name=base,proto3" json:"base,omitempty"`
-	// Native source archive recipe, authenticated by the enclosing catalog.
-	// Mutually exclusive with pack, offset, length, and base. Hash identifies
-	// the decoded Git object as "git-sha1:<hex object ID>".
-	ArchiveRecipe []byte `protobuf:"bytes,6,opt,name=archive_recipe,json=archiveRecipe,proto3" json:"archive_recipe,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ChunkRecord) Reset() {
-	*x = ChunkRecord{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ChunkRecord) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ChunkRecord) ProtoMessage() {}
-
-func (x *ChunkRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ChunkRecord.ProtoReflect.Descriptor instead.
-func (*ChunkRecord) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *ChunkRecord) GetPack() string {
-	if x != nil {
-		return x.Pack
-	}
-	return ""
-}
-
-func (x *ChunkRecord) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *ChunkRecord) GetLength() int64 {
-	if x != nil {
-		return x.Length
-	}
-	return 0
-}
-
-func (x *ChunkRecord) GetHash() string {
-	if x != nil {
-		return x.Hash
-	}
-	return ""
-}
-
-func (x *ChunkRecord) GetBase() *ChunkBase {
-	if x != nil {
-		return x.Base
-	}
-	return nil
-}
-
-func (x *ChunkRecord) GetArchiveRecipe() []byte {
-	if x != nil {
-		return x.ArchiveRecipe
-	}
-	return nil
-}
-
-// Ref names and tag object aliases live in a separately replaced index.
 type ReferenceRecord struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Commit string                 `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
@@ -1250,7 +492,7 @@ type ReferenceRecord struct {
 
 func (x *ReferenceRecord) Reset() {
 	*x = ReferenceRecord{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[18]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1262,7 +504,7 @@ func (x *ReferenceRecord) String() string {
 func (*ReferenceRecord) ProtoMessage() {}
 
 func (x *ReferenceRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[18]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1275,7 +517,7 @@ func (x *ReferenceRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReferenceRecord.ProtoReflect.Descriptor instead.
 func (*ReferenceRecord) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{18}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ReferenceRecord) GetCommit() string {
@@ -1299,7 +541,6 @@ func (x *ReferenceRecord) GetSymbolicTarget() string {
 	return ""
 }
 
-// Stored under p/<commit>, including an empty record for root commits.
 type ParentRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Parents       []string               `protobuf:"bytes,1,rep,name=parents,proto3" json:"parents,omitempty"`
@@ -1309,7 +550,7 @@ type ParentRecord struct {
 
 func (x *ParentRecord) Reset() {
 	*x = ParentRecord{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[19]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1321,7 +562,7 @@ func (x *ParentRecord) String() string {
 func (*ParentRecord) ProtoMessage() {}
 
 func (x *ParentRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[19]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1334,7 +575,7 @@ func (x *ParentRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParentRecord.ProtoReflect.Descriptor instead.
 func (*ParentRecord) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{19}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ParentRecord) GetParents() []string {
@@ -1344,8 +585,6 @@ func (x *ParentRecord) GetParents() []string {
 	return nil
 }
 
-// Bounded display metadata. Message retains up to 24 KiB, author up to 4 KiB;
-// truncation is explicit. Bytes preserve original non-UTF-8 commit text.
 type CommitRecord struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Author                 []byte                 `protobuf:"bytes,1,opt,name=author,proto3" json:"author,omitempty"`
@@ -1358,7 +597,7 @@ type CommitRecord struct {
 	Committer              []byte                 `protobuf:"bytes,8,opt,name=committer,proto3" json:"committer,omitempty"`
 	CommitterOffsetMinutes int32                  `protobuf:"varint,9,opt,name=committer_offset_minutes,json=committerOffsetMinutes,proto3" json:"committer_offset_minutes,omitempty"`
 	CommitterTruncated     bool                   `protobuf:"varint,10,opt,name=committer_truncated,json=committerTruncated,proto3" json:"committer_truncated,omitempty"`
-	// Distinguishes old imports from a present, possibly empty identity.
+	// Distinguishes a missing identity from a present, possibly empty identity.
 	HasCommitter  bool `protobuf:"varint,11,opt,name=has_committer,json=hasCommitter,proto3" json:"has_committer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1366,7 +605,7 @@ type CommitRecord struct {
 
 func (x *CommitRecord) Reset() {
 	*x = CommitRecord{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[20]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1378,7 +617,7 @@ func (x *CommitRecord) String() string {
 func (*CommitRecord) ProtoMessage() {}
 
 func (x *CommitRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[20]
+	mi := &file_gyit_storage_v1_storage_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1391,7 +630,7 @@ func (x *CommitRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitRecord.ProtoReflect.Descriptor instead.
 func (*CommitRecord) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{20}
+	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CommitRecord) GetAuthor() []byte {
@@ -1471,398 +710,11 @@ func (x *CommitRecord) GetHasCommitter() bool {
 	return false
 }
 
-// Direct lookup pages. Keys are (binary object ID, chunk number).
-type DirectBlobPage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*DirectBlobPart      `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
-	Children      []*DirectBlobChild     `protobuf:"bytes,2,rep,name=children,proto3" json:"children,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DirectBlobPage) Reset() {
-	*x = DirectBlobPage{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DirectBlobPage) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectBlobPage) ProtoMessage() {}
-
-func (x *DirectBlobPage) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectBlobPage.ProtoReflect.Descriptor instead.
-func (*DirectBlobPage) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *DirectBlobPage) GetItems() []*DirectBlobPart {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *DirectBlobPage) GetChildren() []*DirectBlobChild {
-	if x != nil {
-		return x.Children
-	}
-	return nil
-}
-
-type DirectBlobPart struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Oid           []byte                 `protobuf:"bytes,1,opt,name=oid,proto3" json:"oid,omitempty"`
-	Part          uint64                 `protobuf:"varint,2,opt,name=part,proto3" json:"part,omitempty"`
-	Size          uint64                 `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
-	Chunk         *ChunkRecord           `protobuf:"bytes,4,opt,name=chunk,proto3" json:"chunk,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DirectBlobPart) Reset() {
-	*x = DirectBlobPart{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DirectBlobPart) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectBlobPart) ProtoMessage() {}
-
-func (x *DirectBlobPart) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectBlobPart.ProtoReflect.Descriptor instead.
-func (*DirectBlobPart) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *DirectBlobPart) GetOid() []byte {
-	if x != nil {
-		return x.Oid
-	}
-	return nil
-}
-
-func (x *DirectBlobPart) GetPart() uint64 {
-	if x != nil {
-		return x.Part
-	}
-	return 0
-}
-
-func (x *DirectBlobPart) GetSize() uint64 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *DirectBlobPart) GetChunk() *ChunkRecord {
-	if x != nil {
-		return x.Chunk
-	}
-	return nil
-}
-
-type DirectBlobChild struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MinOid        []byte                 `protobuf:"bytes,1,opt,name=min_oid,json=minOid,proto3" json:"min_oid,omitempty"`
-	MinPart       uint64                 `protobuf:"varint,2,opt,name=min_part,json=minPart,proto3" json:"min_part,omitempty"`
-	Page          *PageReference         `protobuf:"bytes,3,opt,name=page,proto3" json:"page,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DirectBlobChild) Reset() {
-	*x = DirectBlobChild{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DirectBlobChild) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectBlobChild) ProtoMessage() {}
-
-func (x *DirectBlobChild) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectBlobChild.ProtoReflect.Descriptor instead.
-func (*DirectBlobChild) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *DirectBlobChild) GetMinOid() []byte {
-	if x != nil {
-		return x.MinOid
-	}
-	return nil
-}
-
-func (x *DirectBlobChild) GetMinPart() uint64 {
-	if x != nil {
-		return x.MinPart
-	}
-	return 0
-}
-
-func (x *DirectBlobChild) GetPage() *PageReference {
-	if x != nil {
-		return x.Page
-	}
-	return nil
-}
-
-// Importer staging record; it is never published directly into the store.
-type DirectBlobStaged struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SizeRecord    bool                   `protobuf:"varint,1,opt,name=size_record,json=sizeRecord,proto3" json:"size_record,omitempty"`
-	Size          uint64                 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
-	Chunk         *ChunkRecord           `protobuf:"bytes,3,opt,name=chunk,proto3" json:"chunk,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DirectBlobStaged) Reset() {
-	*x = DirectBlobStaged{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DirectBlobStaged) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectBlobStaged) ProtoMessage() {}
-
-func (x *DirectBlobStaged) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectBlobStaged.ProtoReflect.Descriptor instead.
-func (*DirectBlobStaged) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *DirectBlobStaged) GetSizeRecord() bool {
-	if x != nil {
-		return x.SizeRecord
-	}
-	return false
-}
-
-func (x *DirectBlobStaged) GetSize() uint64 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *DirectBlobStaged) GetChunk() *ChunkRecord {
-	if x != nil {
-		return x.Chunk
-	}
-	return nil
-}
-
-// GitDirectory exposes immutable native Git files over the object-store API.
-// Packed object bytes can reference the archive already retained by import.
-type GitDirectory struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Files         []*GitFile             `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GitDirectory) Reset() {
-	*x = GitDirectory{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GitDirectory) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GitDirectory) ProtoMessage() {}
-
-func (x *GitDirectory) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GitDirectory.ProtoReflect.Descriptor instead.
-func (*GitDirectory) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *GitDirectory) GetFiles() []*GitFile {
-	if x != nil {
-		return x.Files
-	}
-	return nil
-}
-
-type GitFile struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Size  int64                  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
-	// Small files are inline; large files use numbered immutable segments.
-	InlineData    []byte `protobuf:"bytes,3,opt,name=inline_data,json=inlineData,proto3" json:"inline_data,omitempty"`
-	SegmentPrefix string `protobuf:"bytes,4,opt,name=segment_prefix,json=segmentPrefix,proto3" json:"segment_prefix,omitempty"`
-	SegmentSize   int64  `protobuf:"varint,5,opt,name=segment_size,json=segmentSize,proto3" json:"segment_size,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GitFile) Reset() {
-	*x = GitFile{}
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GitFile) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GitFile) ProtoMessage() {}
-
-func (x *GitFile) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_storage_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GitFile.ProtoReflect.Descriptor instead.
-func (*GitFile) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_storage_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *GitFile) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *GitFile) GetSize() int64 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *GitFile) GetInlineData() []byte {
-	if x != nil {
-		return x.InlineData
-	}
-	return nil
-}
-
-func (x *GitFile) GetSegmentPrefix() string {
-	if x != nil {
-		return x.SegmentPrefix
-	}
-	return ""
-}
-
-func (x *GitFile) GetSegmentSize() int64 {
-	if x != nil {
-		return x.SegmentSize
-	}
-	return 0
-}
-
 var File_gyit_storage_v1_storage_proto protoreflect.FileDescriptor
 
 const file_gyit_storage_v1_storage_proto_rawDesc = "" +
 	"\n" +
-	"\x1dgyit/storage/v1/storage.proto\x12\x0fgyit.storage.v1\"\xcf\x03\n" +
-	"\bManifest\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\rR\aversion\x12\x16\n" +
-	"\x06format\x18\x02 \x01(\tR\x06format\x12;\n" +
-	"\troot_page\x18\x05 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\brootPage\x12\x12\n" +
-	"\x04tips\x18\x04 \x03(\tR\x04tips\x122\n" +
-	"\x04refs\x18\x06 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x04refs\x12%\n" +
-	"\x0erevision_graph\x18\a \x01(\bR\rrevisionGraph\x12\x1b\n" +
-	"\trefs_hash\x18\b \x01(\tR\brefsHash\x12'\n" +
-	"\x0fcommit_metadata\x18\t \x01(\bR\x0ecommitMetadata\x128\n" +
-	"\ahistory\x18\n" +
-	" \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\ahistory\x12#\n" +
-	"\rhistory_count\x18\v \x01(\x04R\fhistoryCount\x124\n" +
-	"\x05blobs\x18\f \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x05blobsJ\x04\b\x03\x10\x04R\x04root\"-\n" +
-	"\x0fHistoryPosition\x12\x1a\n" +
-	"\bposition\x18\x01 \x01(\x04R\bposition\"H\n" +
-	"\fHistoryBlock\x128\n" +
-	"\acommits\x18\x01 \x03(\v2\x1e.gyit.storage.v1.HistoryCommitR\acommits\"t\n" +
-	"\rHistoryCommit\x12\x10\n" +
-	"\x03oid\x18\x01 \x01(\fR\x03oid\x12\x12\n" +
-	"\x04tree\x18\x02 \x01(\fR\x04tree\x12\x18\n" +
-	"\aparents\x18\x03 \x03(\x04R\aparents\x12#\n" +
-	"\rchanged_paths\x18\x04 \x01(\fR\fchangedPaths\"v\n" +
+	"\x1dgyit/storage/v1/storage.proto\x12\x0fgyit.storage.v1\"v\n" +
 	"\tIndexPage\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.gyit.storage.v1.IndexItemR\x05items\x127\n" +
 	"\bchildren\x18\x02 \x03(\v2\x1b.gyit.storage.v1.IndexChildR\bchildren\"3\n" +
@@ -1877,22 +729,11 @@ const file_gyit_storage_v1_storage_proto_rawDesc = "" +
 	"\x04pack\x18\x01 \x01(\tR\x04pack\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x16\n" +
 	"\x06length\x18\x03 \x01(\x03R\x06length\x12\x12\n" +
-	"\x04hash\x18\x04 \x01(\tR\x04hash\"\xa5\x01\n" +
+	"\x04hash\x18\x04 \x01(\tR\x04hash\"g\n" +
 	"\fObjectRecord\x12/\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1b.gyit.storage.v1.ObjectKindR\x04kind\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x12\n" +
-	"\x04tree\x18\x03 \x01(\tR\x04tree\x12<\n" +
-	"\tdirectory\x18\x04 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\tdirectory\"\x83\x01\n" +
-	"\rDirectoryPage\x125\n" +
-	"\aentries\x18\x01 \x03(\v2\x1b.gyit.storage.v1.NamedEntryR\aentries\x12;\n" +
-	"\bchildren\x18\x02 \x03(\v2\x1f.gyit.storage.v1.DirectoryChildR\bchildren\"u\n" +
-	"\n" +
-	"NamedEntry\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\fR\x04name\x12\x10\n" +
-	"\x03oid\x18\x02 \x01(\fR\x03oid\x12\x12\n" +
-	"\x04mode\x18\x03 \x01(\rR\x04mode\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x19\n" +
-	"\braw_mode\x18\x05 \x01(\rR\arawMode\"_\n" +
+	"\x04tree\x18\x03 \x01(\tR\x04tree\"_\n" +
 	"\x0eDirectoryChild\x12\x19\n" +
 	"\bmax_name\x18\x01 \x01(\fR\amaxName\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x04page\"e\n" +
@@ -1900,34 +741,7 @@ const file_gyit_storage_v1_storage_proto_rawDesc = "" +
 	"\x03oid\x18\x01 \x01(\tR\x03oid\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\rR\x04mode\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x19\n" +
-	"\braw_mode\x18\x04 \x01(\rR\arawMode\"\x93\x01\n" +
-	"\tChunkBase\x12\x12\n" +
-	"\x04pack\x18\x01 \x01(\tR\x04pack\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x16\n" +
-	"\x06length\x18\x03 \x01(\x03R\x06length\x12\x12\n" +
-	"\x04hash\x18\x04 \x01(\tR\x04hash\x12.\n" +
-	"\x04base\x18\x05 \x01(\v2\x1a.gyit.storage.v1.ChunkBaseR\x04base\"J\n" +
-	"\fAnchorRecord\x12:\n" +
-	"\n" +
-	"candidates\x18\x01 \x03(\v2\x1a.gyit.storage.v1.ChunkBaseR\n" +
-	"candidates\"a\n" +
-	"\n" +
-	"ChunkDelta\x12\x12\n" +
-	"\x04size\x18\x01 \x01(\rR\x04size\x12?\n" +
-	"\n" +
-	"operations\x18\x02 \x03(\v2\x1f.gyit.storage.v1.DeltaOperationR\n" +
-	"operations\"Z\n" +
-	"\x0eDeltaOperation\x12\x16\n" +
-	"\x06offset\x18\x01 \x01(\rR\x06offset\x12\x16\n" +
-	"\x06length\x18\x02 \x01(\rR\x06length\x12\x18\n" +
-	"\aliteral\x18\x03 \x01(\fR\aliteral\"\xbc\x01\n" +
-	"\vChunkRecord\x12\x12\n" +
-	"\x04pack\x18\x01 \x01(\tR\x04pack\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x16\n" +
-	"\x06length\x18\x03 \x01(\x03R\x06length\x12\x12\n" +
-	"\x04hash\x18\x04 \x01(\tR\x04hash\x12.\n" +
-	"\x04base\x18\x05 \x01(\v2\x1a.gyit.storage.v1.ChunkBaseR\x04base\x12%\n" +
-	"\x0earchive_recipe\x18\x06 \x01(\fR\rarchiveRecipe\"o\n" +
+	"\braw_mode\x18\x04 \x01(\rR\arawMode\"o\n" +
 	"\x0fReferenceRecord\x12\x16\n" +
 	"\x06commit\x18\x01 \x01(\tR\x06commit\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12'\n" +
@@ -1948,33 +762,7 @@ const file_gyit_storage_v1_storage_proto_rawDesc = "" +
 	"\x18committer_offset_minutes\x18\t \x01(\x05R\x16committerOffsetMinutes\x12/\n" +
 	"\x13committer_truncated\x18\n" +
 	" \x01(\bR\x12committerTruncated\x12#\n" +
-	"\rhas_committer\x18\v \x01(\bR\fhasCommitter\"\x85\x01\n" +
-	"\x0eDirectBlobPage\x125\n" +
-	"\x05items\x18\x01 \x03(\v2\x1f.gyit.storage.v1.DirectBlobPartR\x05items\x12<\n" +
-	"\bchildren\x18\x02 \x03(\v2 .gyit.storage.v1.DirectBlobChildR\bchildren\"~\n" +
-	"\x0eDirectBlobPart\x12\x10\n" +
-	"\x03oid\x18\x01 \x01(\fR\x03oid\x12\x12\n" +
-	"\x04part\x18\x02 \x01(\x04R\x04part\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x04R\x04size\x122\n" +
-	"\x05chunk\x18\x04 \x01(\v2\x1c.gyit.storage.v1.ChunkRecordR\x05chunk\"y\n" +
-	"\x0fDirectBlobChild\x12\x17\n" +
-	"\amin_oid\x18\x01 \x01(\fR\x06minOid\x12\x19\n" +
-	"\bmin_part\x18\x02 \x01(\x04R\aminPart\x122\n" +
-	"\x04page\x18\x03 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x04page\"{\n" +
-	"\x10DirectBlobStaged\x12\x1f\n" +
-	"\vsize_record\x18\x01 \x01(\bR\n" +
-	"sizeRecord\x12\x12\n" +
-	"\x04size\x18\x02 \x01(\x04R\x04size\x122\n" +
-	"\x05chunk\x18\x03 \x01(\v2\x1c.gyit.storage.v1.ChunkRecordR\x05chunk\">\n" +
-	"\fGitDirectory\x12.\n" +
-	"\x05files\x18\x01 \x03(\v2\x18.gyit.storage.v1.GitFileR\x05files\"\x9c\x01\n" +
-	"\aGitFile\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
-	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x1f\n" +
-	"\vinline_data\x18\x03 \x01(\fR\n" +
-	"inlineData\x12%\n" +
-	"\x0esegment_prefix\x18\x04 \x01(\tR\rsegmentPrefix\x12!\n" +
-	"\fsegment_size\x18\x05 \x01(\x03R\vsegmentSize*m\n" +
+	"\rhas_committer\x18\v \x01(\bR\fhasCommitter*m\n" +
 	"\n" +
 	"ObjectKind\x12\x1b\n" +
 	"\x17OBJECT_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -1995,66 +783,31 @@ func file_gyit_storage_v1_storage_proto_rawDescGZIP() []byte {
 }
 
 var file_gyit_storage_v1_storage_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gyit_storage_v1_storage_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_gyit_storage_v1_storage_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_gyit_storage_v1_storage_proto_goTypes = []any{
-	(ObjectKind)(0),          // 0: gyit.storage.v1.ObjectKind
-	(*Manifest)(nil),         // 1: gyit.storage.v1.Manifest
-	(*HistoryPosition)(nil),  // 2: gyit.storage.v1.HistoryPosition
-	(*HistoryBlock)(nil),     // 3: gyit.storage.v1.HistoryBlock
-	(*HistoryCommit)(nil),    // 4: gyit.storage.v1.HistoryCommit
-	(*IndexPage)(nil),        // 5: gyit.storage.v1.IndexPage
-	(*IndexItem)(nil),        // 6: gyit.storage.v1.IndexItem
-	(*IndexChild)(nil),       // 7: gyit.storage.v1.IndexChild
-	(*PageReference)(nil),    // 8: gyit.storage.v1.PageReference
-	(*ObjectRecord)(nil),     // 9: gyit.storage.v1.ObjectRecord
-	(*DirectoryPage)(nil),    // 10: gyit.storage.v1.DirectoryPage
-	(*NamedEntry)(nil),       // 11: gyit.storage.v1.NamedEntry
-	(*DirectoryChild)(nil),   // 12: gyit.storage.v1.DirectoryChild
-	(*DirectoryEntry)(nil),   // 13: gyit.storage.v1.DirectoryEntry
-	(*ChunkBase)(nil),        // 14: gyit.storage.v1.ChunkBase
-	(*AnchorRecord)(nil),     // 15: gyit.storage.v1.AnchorRecord
-	(*ChunkDelta)(nil),       // 16: gyit.storage.v1.ChunkDelta
-	(*DeltaOperation)(nil),   // 17: gyit.storage.v1.DeltaOperation
-	(*ChunkRecord)(nil),      // 18: gyit.storage.v1.ChunkRecord
-	(*ReferenceRecord)(nil),  // 19: gyit.storage.v1.ReferenceRecord
-	(*ParentRecord)(nil),     // 20: gyit.storage.v1.ParentRecord
-	(*CommitRecord)(nil),     // 21: gyit.storage.v1.CommitRecord
-	(*DirectBlobPage)(nil),   // 22: gyit.storage.v1.DirectBlobPage
-	(*DirectBlobPart)(nil),   // 23: gyit.storage.v1.DirectBlobPart
-	(*DirectBlobChild)(nil),  // 24: gyit.storage.v1.DirectBlobChild
-	(*DirectBlobStaged)(nil), // 25: gyit.storage.v1.DirectBlobStaged
-	(*GitDirectory)(nil),     // 26: gyit.storage.v1.GitDirectory
-	(*GitFile)(nil),          // 27: gyit.storage.v1.GitFile
+	(ObjectKind)(0),         // 0: gyit.storage.v1.ObjectKind
+	(*IndexPage)(nil),       // 1: gyit.storage.v1.IndexPage
+	(*IndexItem)(nil),       // 2: gyit.storage.v1.IndexItem
+	(*IndexChild)(nil),      // 3: gyit.storage.v1.IndexChild
+	(*PageReference)(nil),   // 4: gyit.storage.v1.PageReference
+	(*ObjectRecord)(nil),    // 5: gyit.storage.v1.ObjectRecord
+	(*DirectoryChild)(nil),  // 6: gyit.storage.v1.DirectoryChild
+	(*DirectoryEntry)(nil),  // 7: gyit.storage.v1.DirectoryEntry
+	(*ReferenceRecord)(nil), // 8: gyit.storage.v1.ReferenceRecord
+	(*ParentRecord)(nil),    // 9: gyit.storage.v1.ParentRecord
+	(*CommitRecord)(nil),    // 10: gyit.storage.v1.CommitRecord
 }
 var file_gyit_storage_v1_storage_proto_depIdxs = []int32{
-	8,  // 0: gyit.storage.v1.Manifest.root_page:type_name -> gyit.storage.v1.PageReference
-	8,  // 1: gyit.storage.v1.Manifest.refs:type_name -> gyit.storage.v1.PageReference
-	8,  // 2: gyit.storage.v1.Manifest.history:type_name -> gyit.storage.v1.PageReference
-	8,  // 3: gyit.storage.v1.Manifest.blobs:type_name -> gyit.storage.v1.PageReference
-	4,  // 4: gyit.storage.v1.HistoryBlock.commits:type_name -> gyit.storage.v1.HistoryCommit
-	6,  // 5: gyit.storage.v1.IndexPage.items:type_name -> gyit.storage.v1.IndexItem
-	7,  // 6: gyit.storage.v1.IndexPage.children:type_name -> gyit.storage.v1.IndexChild
-	8,  // 7: gyit.storage.v1.IndexChild.page:type_name -> gyit.storage.v1.PageReference
-	0,  // 8: gyit.storage.v1.ObjectRecord.kind:type_name -> gyit.storage.v1.ObjectKind
-	8,  // 9: gyit.storage.v1.ObjectRecord.directory:type_name -> gyit.storage.v1.PageReference
-	11, // 10: gyit.storage.v1.DirectoryPage.entries:type_name -> gyit.storage.v1.NamedEntry
-	12, // 11: gyit.storage.v1.DirectoryPage.children:type_name -> gyit.storage.v1.DirectoryChild
-	8,  // 12: gyit.storage.v1.DirectoryChild.page:type_name -> gyit.storage.v1.PageReference
-	14, // 13: gyit.storage.v1.ChunkBase.base:type_name -> gyit.storage.v1.ChunkBase
-	14, // 14: gyit.storage.v1.AnchorRecord.candidates:type_name -> gyit.storage.v1.ChunkBase
-	17, // 15: gyit.storage.v1.ChunkDelta.operations:type_name -> gyit.storage.v1.DeltaOperation
-	14, // 16: gyit.storage.v1.ChunkRecord.base:type_name -> gyit.storage.v1.ChunkBase
-	23, // 17: gyit.storage.v1.DirectBlobPage.items:type_name -> gyit.storage.v1.DirectBlobPart
-	24, // 18: gyit.storage.v1.DirectBlobPage.children:type_name -> gyit.storage.v1.DirectBlobChild
-	18, // 19: gyit.storage.v1.DirectBlobPart.chunk:type_name -> gyit.storage.v1.ChunkRecord
-	8,  // 20: gyit.storage.v1.DirectBlobChild.page:type_name -> gyit.storage.v1.PageReference
-	18, // 21: gyit.storage.v1.DirectBlobStaged.chunk:type_name -> gyit.storage.v1.ChunkRecord
-	27, // 22: gyit.storage.v1.GitDirectory.files:type_name -> gyit.storage.v1.GitFile
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	2, // 0: gyit.storage.v1.IndexPage.items:type_name -> gyit.storage.v1.IndexItem
+	3, // 1: gyit.storage.v1.IndexPage.children:type_name -> gyit.storage.v1.IndexChild
+	4, // 2: gyit.storage.v1.IndexChild.page:type_name -> gyit.storage.v1.PageReference
+	0, // 3: gyit.storage.v1.ObjectRecord.kind:type_name -> gyit.storage.v1.ObjectKind
+	4, // 4: gyit.storage.v1.DirectoryChild.page:type_name -> gyit.storage.v1.PageReference
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_gyit_storage_v1_storage_proto_init() }
@@ -2068,7 +821,7 @@ func file_gyit_storage_v1_storage_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gyit_storage_v1_storage_proto_rawDesc), len(file_gyit_storage_v1_storage_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   27,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

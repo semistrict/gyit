@@ -1,5 +1,84 @@
 # Full-scan performance
 
+## GCE `find` scan and live cache coherence (2026-09-27)
+
+The latest scanner times the actual `find . -name DOES_NOT_EXIST` command on
+9,358 entries (957 directories) at revision
+`595cc91e8cbb1c2ca822d0311dcf12709410c582`. Both worktrees have no root `.git`.
+After all timed passes, full path/type/size digests must match. A newly created
+ext4 image supplies the guest-local disk baseline; its empty `lost+found` is
+removed before boot. All scans use the same nested-KVM guest and executable.
+
+Directory-listing reuse and following prepared directory pointers avoid repeated
+READDIR requests and global-index lookups. No new durable storage format or
+unbounded RAM cache was added. The comparison still uses native GCS.
+
+| Policy | First gyit find | Ordinary virtio-fs | First ratio | Warm gyit / virtio-fs |
+|---|---:|---:|---:|---:|
+| Before changes, immutable attribute TTL | 669 ms | 348 ms | 1.92× | 589 / 91 ms = 6.45× |
+| Fixed snapshot, 300s attribute TTL, repeat 1 | 638 ms | 358 ms | 1.78× | 105 / 86 ms = 1.22× |
+| Fixed snapshot, 300s attribute TTL, repeat 2 | 643 ms | 400 ms | 1.61× | 110 / 92 ms = 1.20× |
+| Immediate revalidation, zero attribute TTL | 1,809 ms | 359 ms | 5.04× | 1,697 / 89 ms = 19.07× |
+| One-second TTL, stateless directory opens, back-to-back scans | 570 ms | 382 ms | 1.49× | 12 / 85 ms = 0.14× |
+| One-second TTL, stateless directory opens, 1.1s pause between scans | 585 ms | 335 ms | 1.75× | 137 / 90 ms = 1.52× |
+
+Every row starts a fresh VM/backend with an empty decoded cache. Five passes
+alternate baseline order. Setup/import/VM boot are outside the scan timer;
+host page caches remain populated. virtiofsd uses `--cache=always`. Counters for
+startup, traversal, and the post-timing content check together are eight GCS
+reads and 1,747,999 transferred bytes. The one-second policy meets the 2×
+virtio-fs criterion even after attributes expire between scans. Guest-local ext4
+took 126 ms first and 13 ms warm in that run; gyit does not meet the alternative
+4× local-disk target. This is a scan benchmark, not an import or Git benchmark.
+
+Linux `fs/fuse/readdir.c:fuse_readdir_cached` revalidates directory mtime with
+AUTO_INVAL_DATA and resets cached listings when it changes. gyit now exposes
+publication generations as directory mtimes and refreshes retained snapshot
+entries on generation changes. Regular `/dev/fuse` mounts also send inode and
+entry invalidation notifications off the publishing request goroutine. Linux
+virtio-fs does not negotiate the optional Virtio notification queue, so live
+virtio-fs attributes expire after at most one second, the accepted freshness
+delay. Longer attribute TTLs are only allowed for immutable prepared snapshots.
+
+The stock kernel also supports `FUSE_NO_OPENDIR_SUPPORT`: after one ENOSYS
+response it omits OPENDIR and RELEASEDIR while keeping directory caching and
+mtime revalidation. The virtio-fs adapter enables this and creates temporary
+Go-FUSE handles only inside READDIR/READDIRPLUS. A two-name continuation hint
+per live directory inode avoids replaying every earlier entry between requests;
+rewinds or concurrent cursor misses use the existing seek fallback. This removes
+two guest round trips per directory without extending cache lifetimes. No
+custom kernel or additional Go-FUSE fork is needed for this optimization.
+
+`TestMountedBackgroundPublication` checks cached NOTICE replacement, additions,
+deletions, changed contents, and old open handles on real Linux FUSE.
+`scripts/verify_virtiofs_updates.py` separately checks real nested-KVM virtio-fs:
+it warms root/subdirectory caches, publishes a local upstream commit, invokes
+`gyit update` inside the guest, and verifies refreshed listings and a preserved
+open handle to the removed file. It also checks changed file size and contents,
+and fails unless the refreshed state appears within 1.25 seconds (one-second
+TTL plus scheduling tolerance). This works without host notifications.
+The helper removes all of its guest processes and temporary fixture data.
+
+Repeat the actual find comparison with:
+
+```sh
+sudo python3 scripts/benchmark_nested_kvm.py \
+  --server /path/to/gyit-vhost --store gs://BUCKET/REPOSITORY \
+  --sha FULL_SHA --checkout /path/to/clean-worktree \
+  --cache /path/to/cache --kernel /boot/vmlinuz-VERSION \
+  --initrd /boot/initrd.img-VERSION --output /path/to/results \
+  --mode find --empty-cache --guest-disk
+```
+
+The default one-second attribute TTL tests the live freshness policy. Add
+`--pause-between-runs 1.1` to expire it before each later scan; pauses are outside
+the timer. Use `--metadata-ttl 0` for immediate revalidation or
+`--metadata-ttl 300` only for the fixed-snapshot comparison. This benchmark
+rejects mismatched trees and fails unless both first and warm scans meet 2×
+virtio-fs, or both meet 4× guest-local disk. Evidence is in
+`.build/find-performance/`, including the unsuccessful live-policy measurement.
+
+
 The current target is native `git status` on the larger, 8,401-file fixture,
 within 2× a normal checkout at the same revision through **direct virtio-fs**.
 The earlier complete Python traversal benchmark remains available with its 4×
@@ -283,3 +362,246 @@ go test ./internal/repo -run '^$' -bench BenchmarkSnapshotScan -benchmem
 Use a new fixture data directory when the source revision changes. Import is
 outside the timed scan. Backend timings alone do not establish mounted scan
 performance, and warm results alone do not satisfy the goal.
+
+
+## GCE nested KVM and native GCS (2026-09-27)
+
+This experiment uses a native GCS adapter (`cloud.google.com/go/storage`),
+Application Default Credentials from the VM's read-only service account, and
+GCS generation preconditions for atomic publication. The real-bucket adapter
+check exercises 16 concurrent CAS writers across two clients (exactly one wins),
+create-only publication, missing objects, empty objects, resumable uploads,
+CRC32C and cross-chunk byte ranges. No S3 compatibility endpoint is involved.
+
+Configuration:
+
+- GCE `n2-standard-8`, Intel Cascade Lake, Ubuntu 24.04, nested virtualization
+  enabled, 100 GiB SSD boot disk, `us-east4-a`; private GCS bucket in `us-east4`.
+- Host kernel `7.0.0-1011-gcp`; QEMU 8.2.2 with `-enable-kvm -cpu host`;
+  guest kernel `6.8.0-142-generic`, four vCPUs and 8 GiB RAM.
+- Direct Go-FUSE vhost-user server versus virtiofsd 1.10.0 sharing a normal
+  checkout. Both run on the same host and serve the same guest read-only.
+- Go server uses the pure-Go Linux amd64 build. Its metadata TTL is 300 seconds;
+  the baseline uses `virtiofsd --cache=always`. Each run starts a fresh guest and
+  server; host OS caches remain intact.
+- Same large fixture at `595cc91e8cbb1c2ca822d0311dcf12709410c582`:
+  9,358 entries, including 957 directories. Five alternating-order pairs per
+  run; identical traversal digests and a post-timing file-content check required.
+- Durable repository data is in GCS. The server has only a 4 GiB bounded decoded
+  cache locally (about 28 MiB populated by this scan), plus process state.
+  Import, upload, server startup and VM boot are outside the scan timer.
+
+| Decoded cache before run | Scan | gyit first scan | virtiofsd first scan | First ratio | Warm ratio |
+|---|---|---:|---:|---:|---:|
+| Existing | names | 0.604–0.625 s | 0.336–0.395 s | 1.53–1.86× | 4.85–5.22× |
+| Existing | stat | 0.654–0.662 s | 0.400–0.439 s | 1.51–1.63× | 4.04–4.31× |
+| Empty | names | 69.918–71.801 s | 0.337–0.359 s | 199.73–207.60× | 5.09–5.42× |
+| Empty | stat | 70.763–72.210 s | 0.475–0.501 s | 144.09–148.86× | 3.25–4.31× |
+
+Two fresh-VM repeats per row: **80 matching full traversals** across eight VMs.
+Every cold first scan exceeds one second. Server startup takes 0.20–0.50 seconds,
+separately from scan timing.
+
+Cold scans make 3,120 adapter Get calls and transfer 17.4 MB, including startup
+and the post-timing content check. Existing-cache runs make only two startup
+Get calls (0.80 MB), with no further reads from GCS during traversal. These are
+adapter-level counts; SDK retries are not counted separately. Request latency
+from thousands of small range reads dominates the cold result. The remaining
+warm gap exists even when traversal makes no GCS requests. **Neither condition
+satisfies the full 2× goal.**
+
+The benchmark also exposed an upstream transport limitation: Go-FUSE's
+experimental vhost-user path assumed each READ payload was one contiguous guest
+buffer. Real Linux guests split it across pages. The harness now uses the shared
+flat protocol adapter to gather/scatter those buffers; its regression test covers
+fragmented headers, multi-page content, offsets and EOF. Earlier runs with read
+errors or AppleDouble files in the copied baseline are excluded. The runner
+terminates the diskless VM after the guest's completion marker because the
+experimental backend can stall QEMU during device teardown.
+
+This is a scan benchmark, not an import-throughput result, native `git status`
+measurement or comparison against Apple's macOS implementation. The ordinary
+GitHub auto-import app still uses local durable storage. Reproduction and cleanup
+instructions are in [GCE_BENCHMARK.md](scripts/GCE_BENCHMARK.md). Raw results are
+retained locally under `.build/gce/results/`.
+
+The test VM, boot disk, GCS bucket and dedicated service account were deleted
+after measurement and their absence verified. No cloud test resources remain.
+
+## Progressive format on GCE/GCS (2026-09-27)
+
+The progressive implementation was deployed to a new disposable host using the
+same N2/Cascade Lake configuration, nested QEMU/KVM guest, native GCS adapter and
+9,358-entry / 957-directory fixture at
+`595cc91e8cbb1c2ca822d0311dcf12709410c582` as the earlier benchmark.
+The fixture contained one complete snapshot; acquisition from GitHub and full
+history import were outside this scan experiment.
+
+Direct publication from the packed snapshot fixture to GCS took **28.62 seconds**:
+0.70 seconds for packs/index publication and 27.91 seconds for filesystem
+metadata. Both publication as a whole and metadata preparation exceed one second.
+A separate GCE integration suite checked default-branch/branch/tag updates, SHA
+pinning, failed-update preservation and log parity with Git against GCS. That
+suite took 11.64 seconds in total; it is not a per-command latency measurement.
+
+After publication, the VM service account was reduced to bucket objectViewer.
+The independent vhost reader received the GCS prefix and commit ID, without an
+acquisition repository or local durable-store copy. Its decoded cache was
+separate from the writer's. Server startup took 0.10–0.20 seconds.
+
+| Reader cache before guest | Scan | First gyit scan | First ordinary checkout | First ratio | Warm median ratio |
+|---|---|---:|---:|---:|---:|
+| Empty persistent cache | stat | 24.901 s | 0.402 s | 61.89× | 3.87× |
+| Existing persistent cache | names | 0.530 s | 0.347 s | 1.53× | 5.23× |
+| Empty isolated cache | stat | 24.565 s | 0.477 s | 51.51× | 3.78× |
+| Empty isolated cache | names | 24.510 s | 0.384 s | 63.81× | 5.18× |
+
+Every cold scan exceeds one second. Warm gyit medians were 0.42 seconds for
+names and 0.44–0.45 seconds for stat, versus 0.08 and 0.12 seconds respectively
+for the ordinary checkout through virtiofsd. **The 2× scan target remains unmet.**
+The first row's output directory is named `stat-cached`, but its recorded
+`cache_initially_empty` is true; it must not be reported as an existing-cache run.
+
+Four fresh guests each ran five alternating-order pairs: **40 matching
+traversals**, including path/type digests in names mode and file/symlink sizes
+in stat mode, with a file-content comparison after each guest's scans. There
+were no GCS adapter errors. Each cold run made 1,024 Get calls and returned
+807,294 bytes (including startup and the content check), with 23.5–23.9 seconds
+of aggregate request latency. The existing-cache run made one 120-byte startup
+Get, with no subsequent GCS reads during traversal. Fewer small metadata reads
+reduce cold time from the prior 70–72 seconds to about 25 seconds, but serial
+remote request latency still dominates. Warm transport overhead is also still
+present. No scan optimization was claimed from deployment alone.
+
+Raw results and the cleanup record are under `.build/gce-progressive/`.
+The command/update integration suite runs on the host; this benchmark does not
+implement or claim guest-to-host CLI control-socket forwarding.
+
+The disposable GCE VM, boot disk, GCS bucket and dedicated service account were
+removed after collecting results; all four were verified absent.
+
+## Cold-scan diagnosis on GCE/GCS (2026-09-27)
+
+The dominant problem is request granularity. The writer packs directory pages
+into 256 KiB objects, but `Progressive.directoryPage` issues a separate range
+Get for every compressed page. Sequential traversal pays one network round trip
+per page. Batching writes alone did not batch reads.
+
+A new retained N2 standard-8 instance in us-east4-a used the same prepared
+9,358-entry snapshot, native GCS adapter, and nested-KVM benchmark. Every reader
+started with an empty decoded cache. The direct storage probe recursively calls
+the real `Snapshot.ReadDir` and hashes paths, modes and sizes. It counts 958
+directories including the root (the guest scan reports 957 descendants).
+
+| Direct repository traversal | Scan time | Directory Gets | Directory bytes |
+|---|---:|---:|---:|
+| Current GCS range reader | 21.234 s | 1,010 | 557,036 |
+| Diagnostic whole-directory-container reads | 0.360 s | 3 | 557,036 |
+| Diagnostic whole-directory and index-container reads | 0.209 s | 3 | 557,036 |
+| Current range reader against a local copy of the same store | 0.166 s | 1,010 local reads | 557,036 |
+
+All four traversals produced the same digest. In the unmodified GCS reader,
+502, 444 and 64 requests addressed just three directory objects. Those reads
+consumed 20.718 seconds; median request latency was 20.15 ms, p95 29.32 ms.
+Eight additional index reads cost 0.179 seconds. These measurements exclude
+opening the snapshot, which took 0.208 seconds for the original GCS reader.
+Fetching the ordinary index containers wholesale also transfers extra unrelated
+index bytes: opening went from 26,406 index bytes to 1,157,273 bytes. That variant
+is a diagnostic control, not the proposed production policy.
+
+The whole-directory-container experiment was then run through the actual
+virtio-fs adapter, in a fresh diskless QEMU/KVM guest for each variant:
+
+| Backend / reader | First stat scan | Ordinary checkout through virtiofsd | First ratio | Warm ratio | Store Gets |
+|---|---:|---:|---:|---:|---:|
+| GCS, current range reader | 23.032 s | 0.782 s | 29.44× | 3.83× | 1,024 |
+| GCS, diagnostic directory-container reads | 0.964 s | 0.423 s | 2.28× | 4.18× | 17 |
+| Local store, current range reader | 0.734 s | 0.402 s | 1.83× | 4.22× | 1,024 |
+
+All three transferred 806,824 Store bytes, including snapshot startup and the
+post-scan content comparison. Aggregate Store read time was 21.993 seconds,
+0.448 seconds and 0.0165 seconds respectively. Each guest ran five alternating
+pairs of traversals: all 30 path/type/size digests matched, and the file-content
+comparison succeeded in each guest. First-run baseline timings vary between
+fresh guests; these are individual causal experiments, not latency percentiles.
+
+The experiment changes only how directory-object ranges are fetched. It uses
+a diagnostic-only compressed RAM buffer capped at 32 MiB; this fixture used
+557,036 bytes. It is not installed in the application and is not a proposed
+second production cache tier. No production reader behavior changed during this
+investigation.
+
+The next production change should fetch a bounded directory metadata container
+once and populate the existing globally bounded **uncompressed** disk cache
+with its decoded pages. Concurrent requests should share the container fetch;
+the temporary compressed transfer buffer should then be discarded. Decoding all
+pages requires bounded framing/validation of the concatenated page records.
+Keep immutable container/page references and incremental publication; a complete
+repository download or a monolithic per-snapshot metadata object is unnecessary.
+Following already-stored child directory references could avoid the remaining
+index requests, but those are a secondary cost in this experiment.
+
+The 2× target is still unmet with remote storage, and even the local-store warm
+mount remains approximately 4× slower than virtiofsd. That residual cost needs a
+separate transport/local-processing profile; it does not explain the original
+20+ seconds of cold latency.
+
+Raw probes, per-request traces, diagnostic sources and guest results are in
+`.build/gce-cold-investigation/`. The direct probe source is
+`probe/main.go`; the modified benchmark-only server is in `vhost-probe/`.
+`run-probes.sh` and `run-kvm.sh` record the invocations. The local control retains
+a separate durable store copy solely to isolate network cost; the GCS variants
+still read from GCS with independent empty decoded caches.
+
+At the user's request, these resources are **retained**, with no automatic VM
+termination timer:
+
+- Project: `echophase-connectome-test`
+- Zone: `us-east4-a`
+- VM: `gyit-cold-d5f2c4`
+- Bucket: `gs://echophase-connectome-test-gyit-cold-d5f2c4`
+- Service account: `gyit-cold-d5f2c4@echophase-connectome-test.iam.gserviceaccount.com`
+
+The VM's prepared fixture, durable-store control copy, binaries and results remain
+under `/home/ramon/`; nested guest results are under `/var/tmp/gyit-cold-results/`.
+The previous section's deletion record refers to the earlier instance only.
+
+## Production container reader (2026-09-27)
+
+`Progressive.directoryPage` now reads a whole immutable directory container on
+its first cache miss. It walks the existing Zstandard frame boundaries, checks
+and decodes the frames, and populates the same bounded uncompressed page cache.
+There is no storage-format change or retained compressed cache. Concurrent
+misses for different pages in the same container share a fetch. Scratch decoding
+is limited to 4 MiB per container, with at most eight active cache loaders;
+containers with unusually high expansion fall back to single-page reads. A full
+or disabled decoded cache still returns the requested page correctly.
+
+The production vhost binary was tested against the **existing** GCS publication
+on the retained VM, with fresh guests and empty decoded caches:
+
+| Scan | First gyit | Ordinary checkout through virtiofsd | First ratio | Warm median ratio | Store Gets |
+|---|---:|---:|---:|---:|---:|
+| stat | 0.886 s | 0.441 s | 2.01× | 4.13× | 17 |
+| names | 0.871 s | 0.332 s | 2.62× | 4.60× | 17 |
+
+The previous unmodified-reader stat scan was 23.032 seconds and 1,024 Gets.
+The production stat scan is about 26× faster. Both new runs transferred 806,824
+Store bytes, including startup and the post-scan file comparison. All 20 paired
+traversals matched their checkout path/type (and stat-mode size) digests; both
+file-content comparisons succeeded. The 2× target is **not yet met**. Warm
+transport/local-processing overhead remains outside this container-read change.
+
+Regression tests cover one fetch per container, persistent decoded-cache reuse,
+concurrent readers of different pages, zero/tiny caches, corrupt and truncated
+frames, invalid references, multiple Zstandard blocks, cancellation and the
+high-expansion fallback. `BenchmarkProgressiveColdDirectoryScan` exercises 512
+pages with a fresh real disk cache: 68.4 ms/op and 1 container Get/op over three
+iterations on the development machine. It is a local reader microbenchmark,
+not an object-store latency result.
+
+The updated GCE binary is `/home/ramon/gyit-vhost-production`. The reproducible
+runner is `.build/gce-cold-investigation/run-production.sh`, with results in
+`production-kvm.tar.gz` and `/var/tmp/gyit-cold-results/production-{stat,names}`
+on the VM. The cloud resources remain retained. This turn did not replace the
+installed macOS application.

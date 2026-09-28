@@ -44,3 +44,27 @@ func TestMergeHeaderDisambiguatesParents(t *testing.T) {
 		t.Fatal("display abbreviated the full parent identities")
 	}
 }
+
+func TestAbbreviateUnfetchedParentAgainstKnownObjects(t *testing.T) {
+	backend, err := store.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing := "1234567a" + strings.Repeat("0", 32)
+	w := &indexWriter{ctx: t.Context(), store: backend, prefix: "missing-parent"}
+	e, err := w.save(page{Items: []item{{Key: "o/" + existing}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = w.flush(); err != nil {
+		t.Fatal(err)
+	}
+	idx := &index{store: backend, cache: newCache(1 << 20), root: e.ID}
+	refs := &index{store: backend, cache: idx.cache}
+	for _, tc := range []struct{ oid, want string }{{"fedcba9" + strings.Repeat("0", 33), "fedcba9"}, {"1234567b" + strings.Repeat("0", 32), "1234567b"}} {
+		got, err := abbreviate(t.Context(), idx, refs, tc.oid)
+		if err != nil || got != tc.want {
+			t.Fatalf("abbreviation %q want %q: %v", got, tc.want, err)
+		}
+	}
+}

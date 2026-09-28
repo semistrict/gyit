@@ -1,6 +1,7 @@
 package control
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -23,6 +24,9 @@ type Client struct{ Endpoint string }
 
 func (c Client) Status(ctx context.Context) (*pb.Snapshot, error) {
 	return c.call(ctx, &pb.Request{Version: Version, Operation: &pb.Request_Status{Status: &pb.StatusRequest{}}})
+}
+func (c Client) Update(ctx context.Context) (*pb.Snapshot, error) {
+	return c.call(ctx, &pb.Request{Version: Version, Operation: &pb.Request_Update{Update: &pb.UpdateRequest{}}})
 }
 func (c Client) Switch(ctx context.Context, revision string) (*pb.Snapshot, error) {
 	return c.call(ctx, &pb.Request{Version: Version, Operation: &pb.Request_Switch{Switch: &pb.SwitchRequest{Revision: revision}}})
@@ -93,9 +97,12 @@ func (c Client) exchange(ctx context.Context, req *pb.Request, consume func(*pb.
 	if err := writeFrame(conn, req); err != nil {
 		return err
 	}
+	// Batch available frames into one filesystem read; individual header/body
+	// reads otherwise require two guest/host crossings per entry.
+	reader := bufio.NewReaderSize(conn, MaxFrameSize+4)
 	for {
 		resp := new(pb.Response)
-		if err := readFrame(conn, resp); err != nil {
+		if err := readFrame(reader, resp); err != nil {
 			return err
 		}
 		if resp.Version != Version {

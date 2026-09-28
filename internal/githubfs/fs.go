@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"golang.org/x/sync/singleflight"
 	"io"
 	"io/fs"
 	"net/url"
@@ -18,13 +17,19 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"golang.org/x/sys/unix"
+	"golang.org/x/sync/singleflight"
+
 	"gyit/internal/control"
 	"gyit/internal/repo"
 	"gyit/internal/store"
+
+	"golang.org/x/sys/unix"
 )
 
 type Options struct {
+	// StoreRoot optionally locates durable progressive repositories in object storage.
+	// DataDir still owns local acquisition/process state; CacheDir remains disposable.
+	StoreRoot string
 	// DataDir is durable repository storage, never subject to cache eviction.
 	DataDir string
 	// CacheDir contains disposable decoded data shared by every repository.
@@ -84,7 +89,8 @@ func parse(path string) ([]string, Target, error) {
 }
 
 type job struct {
-	git         *gitDirectory
+	update      chan struct{}
+	progressive *repo.Progressive
 	control     *control.Server
 	endpoint    string
 	mu          sync.RWMutex
@@ -94,7 +100,6 @@ type job struct {
 	startedAt   time.Time
 	finishedAt  time.Time
 	snapshot    *repo.Snapshot
-	repository  *repo.Repository
 	done        chan struct{}
 	noticeAfter time.Time
 	generation  uint64
@@ -146,20 +151,26 @@ func (j *job) progress(s string) {
 }
 
 type FS struct {
-	controlDir    string
-	opts          Options
-	ctx           context.Context
-	cancel        context.CancelFunc
-	mu            sync.Mutex
-	jobs          map[string]*job
-	owners        map[string]bool
-	closed        bool
-	workers       chan struct{}
-	wg            sync.WaitGroup
-	cache         *store.DiskCache
-	lock          *os.File
-	listings      map[string]listing
-	listingFlight singleflight.Group
+	changeMu          sync.Mutex
+	changeID          uint64
+	changes           map[uint64]func(string)
+	directoryVersions map[string]uint64
+	progressiveRepos  map[string]*progressiveRepository
+	preparedOnly      bool
+	controlDir        string
+	opts              Options
+	ctx               context.Context
+	cancel            context.CancelFunc
+	mu                sync.Mutex
+	jobs              map[string]*job
+	owners            map[string]bool
+	closed            bool
+	workers           chan struct{}
+	wg                sync.WaitGroup
+	cache             *store.DiskCache
+	lock              *os.File
+	listings          map[string]listing
+	listingFlight     singleflight.Group
 }
 
 func New(o Options) (*FS, error) {
@@ -209,8 +220,12 @@ func (f *FS) Close() error {
 		if j.control != nil {
 			j.control.Close()
 		}
-		if j.repository != nil {
-			j.repository.Close()
+	}
+	for _, p := range f.progressiveRepos {
+		if p.backend != nil {
+			if c, ok := p.backend.(io.Closer); ok {
+				_ = c.Close()
+			}
 		}
 	}
 	if f.controlDir != "" {
@@ -270,10 +285,12 @@ func (f *FS) ensureJob(t Target, display string) (*job, error) {
 	if len(f.jobs) >= 4096 {
 		return nil, syscall.ENOSPC
 	}
-	j := &job{target: t, display: display, done: make(chan struct{}), generation: 1}
+	j := &job{target: t, display: display, done: make(chan struct{}), update: make(chan struct{}, 1), generation: 1}
 	j.progress("Queued for background setup.")
 	f.jobs[t.Key()] = j
 	f.owners[t.Owner] = true
+	f.changed("")
+	f.changed(t.Owner)
 	f.start(j)
 	return j, nil
 }
@@ -303,29 +320,18 @@ func (f *FS) start(j *job) {
 			j.progress("Setup canceled.")
 			return
 		}
-		r, s, err := f.prepare(f.ctx, t, func(message string) { j.progress(f.redact(message)) })
+		p, s, err := f.prepareProgressive(f.ctx, t, func(message string) { j.progress(f.redact(message)) })
 		if err != nil {
-			message := f.redact(err.Error())
-			j.progress("Setup failed: " + message + "\nTouch NOTICE to retry.")
-			return
-		}
-		backend, err := store.NewLocal(filepath.Join(f.opts.DataDir, repositoryDirectory, storeID(t, s.SHA)))
-		var gitView *gitDirectory
-		if err == nil {
-			gitView, err = openGitDirectory(f.ctx, backend)
-		}
-		if err != nil {
-			r.Close()
 			j.progress("Setup failed: " + f.redact(err.Error()) + "\nTouch NOTICE to retry.")
 			return
 		}
-		gitView.bindIndex(f.cache, "github.com/"+j.display, s)
 		j.mu.Lock()
-		j.repository = r
-		j.git = gitView
-		j.snapshot = s
+		j.progressive, j.snapshot = p.reader, s
 		j.generation++
 		j.mu.Unlock()
+		f.changed(j.display)
+		f.startProgressiveBackground(p, s, j)
+		return
 	}()
 }
 
@@ -379,8 +385,12 @@ func (f *FS) Lookup(ctx context.Context, path string) (repo.Entry, error) {
 			f.mu.Unlock()
 			return repo.Entry{}, syscall.ENOSPC
 		}
+		added := !f.owners[t.Owner]
 		f.owners[t.Owner] = true
 		f.mu.Unlock()
+		if added {
+			f.changed("")
+		}
 		return directory(p[0]), nil
 	}
 	// Finder and IDEs stat every child of an owner listing. Merely inspecting
@@ -403,9 +413,7 @@ func (f *FS) Lookup(ctx context.Context, path string) (repo.Entry, error) {
 		}
 		return repo.Entry{}, syscall.ENOENT
 	}
-	if name, ok := gitPath(relative); ok {
-		return j.git.lookup(name)
-	}
+
 	return s.Resolve(ctx, relative)
 }
 func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo.Entry, error) {
@@ -459,9 +467,7 @@ func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo
 			}
 			entries = []repo.Entry{{Name: "NOTICE", Mode: 0100444, Size: int64(len(notice))}}
 		} else {
-			if name, ok := gitPath(strings.Join(p[2:], "/")); ok {
-				return j.git.readDir(name, after, limit)
-			}
+
 			e, err := s.Resolve(ctx, strings.Join(p[2:], "/"))
 			if err != nil {
 				return nil, err
@@ -472,15 +478,11 @@ func (f *FS) ReadDir(ctx context.Context, path, after string, limit int) ([]repo
 			if e.Mode != 0040000 {
 				return nil, syscall.ENOTDIR
 			}
-			entries, err := s.ReadDir(ctx, e.OID, after, limit)
+			entries, err := s.ReadDirectory(ctx, e, after, limit)
 			if err != nil {
 				return nil, err
 			}
-			if len(p) == 2 && after < ".git" {
-				entries = append(entries, directory(".git"))
-				sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
-				entries = entries[:min(limit, len(entries))]
-			}
+
 			return entries, nil
 		}
 	}
@@ -524,9 +526,7 @@ func (f *FS) Read(ctx context.Context, path string, b []byte, off int64) (int, e
 		}
 		return copy(b, notice[off:]), nil
 	}
-	if name, ok := gitPath(relative); ok {
-		return j.git.read(ctx, name, b, off)
-	}
+
 	e, err := s.Resolve(ctx, relative)
 	if err != nil {
 		return 0, err

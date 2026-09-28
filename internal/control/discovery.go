@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	pb "gyit/internal/gen/gyit/control/v1"
 	"google.golang.org/protobuf/proto"
+	pb "gyit/internal/gen/gyit/control/v1"
 )
 
 const EndpointAttribute = "user.gyit.control"
@@ -47,6 +47,9 @@ func discoverMount(start string, read func(string) ([]byte, error)) (string, str
 				return "", "", fmt.Errorf("unsupported mount control version %d at %s", endpoint.Version, dir)
 			}
 			if endpoint.ControlFile != "" {
+				if endpoint.ControlFile == ControlFileName {
+					endpoint.ControlFile = filepath.Join(dir, ControlFileName)
+				}
 				if endpoint.Socket != "" || endpoint.ControlFile != filepath.Join(dir, ControlFileName) {
 					return "", "", fmt.Errorf("invalid mount control file at %s", dir)
 				}

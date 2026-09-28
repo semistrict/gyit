@@ -80,7 +80,8 @@ func TestDirectVirtioProtocol(t *testing.T) {
 	init := make([]byte, 64)
 	binary.LittleEndian.PutUint32(init, 7)
 	binary.LittleEndian.PutUint32(init[4:], 38)
-	if b, e := call(26, 1, init); e != 0 || len(b) < 24 {
+	binary.LittleEndian.PutUint32(init[12:], 1<<24)
+	if b, e := call(26, 1, init); e != 0 || len(b) < 24 || binary.LittleEndian.Uint32(b[12:])&(1<<24) == 0 {
 		t.Fatalf("init %x %d", b, e)
 	}
 	lookup := func(parent uint64, name string) uint64 {
@@ -89,8 +90,8 @@ func TestDirectVirtioProtocol(t *testing.T) {
 		if e != 0 || len(b) != 128 {
 			t.Fatalf("lookup %s: size=%d err=%d", name, len(b), e)
 		}
-		if name != "hello" && binary.LittleEndian.Uint64(b[16:24]) == 0 {
-			t.Fatalf("stable positive lookup %s was not cached", name)
+		if binary.LittleEndian.Uint64(b[16:24]) > 1 || binary.LittleEndian.Uint64(b[24:32]) > 1 {
+			t.Fatalf("live lookup %s must bound cache lifetime to one second", name)
 		}
 		return binary.LittleEndian.Uint64(b)
 	}
@@ -98,10 +99,10 @@ func TestDirectVirtioProtocol(t *testing.T) {
 	owner := lookup(host, "acme")
 	repository := lookup(owner, "repo")
 	file := lookup(repository, "hello")
-	// The first lookup may cross publication; caching is conservative then.
-	// A stable lookup after publication must have a positive metadata TTL.
-	if b, e := call(1, repository, []byte("hello\x00")); e != 0 || len(b) != 128 || binary.LittleEndian.Uint64(b[16:24]) == 0 {
-		t.Fatalf("published lookup TTL: %x %d", b, e)
+	// Live views cap metadata caching at one second even after publication; directory data
+	// stays cached until its versioned mtime changes.
+	if b, e := call(1, repository, []byte("hello\x00")); e != 0 || len(b) != 128 || binary.LittleEndian.Uint64(b[16:24]) != 1 {
+		t.Fatalf("live published lookup TTL: %x %d", b, e)
 	}
 	rootNode := &node{source: githubfs.Namespace{FS: namespace}}
 	entry, err := namespace.Lookup(t.Context(), "acme/repo/hello")
@@ -126,20 +127,23 @@ func TestDirectVirtioProtocol(t *testing.T) {
 		t.Fatalf("readlink: %q %d", b, e)
 	}
 	many := lookup(repository, "many")
-	opened, e := call(27, many, make([]byte, 8))
-	if e != 0 || len(opened) != 16 {
-		t.Fatalf("opendir: %x %d", opened, e)
+	for _, id := range []uint64{1, host, owner, repository, many} {
+		if _, err := call(27, id, make([]byte, 8)); err != -38 {
+			t.Fatalf("stateless opendir must return ENOSYS: %d", err)
+		}
 	}
-	fh := binary.LittleEndian.Uint64(opened)
-	for pass := 0; pass < 2; pass++ {
+	for pass := 0; pass < 3; pass++ {
+		opcode, prefix := uint32(44), 128
+		if pass == 2 {
+			opcode, prefix = 28, 0
+		}
 		offset := uint64(0)
 		seen := 0
 		for {
 			req := make([]byte, 40)
-			binary.LittleEndian.PutUint64(req, fh)
 			binary.LittleEndian.PutUint64(req[8:], offset)
 			binary.LittleEndian.PutUint32(req[16:], 512)
-			page, err := call(44, many, req)
+			page, err := call(opcode, many, req)
 			if err != 0 {
 				t.Fatalf("readdirplus: %d", err)
 			}
@@ -147,19 +151,22 @@ func TestDirectVirtioProtocol(t *testing.T) {
 				break
 			}
 			for len(page) > 0 {
-				if len(page) < 152 {
+				if len(page) < prefix+24 {
 					t.Fatalf("short dirent: %x", page)
 				}
-				n := int(binary.LittleEndian.Uint32(page[144:]))
-				length := 128 + (24+n+7)&^7
+				n := int(binary.LittleEndian.Uint32(page[prefix+16:]))
+				length := prefix + (24+n+7)&^7
 				if n < 1 || length > len(page) {
 					t.Fatalf("invalid dirent name length %d", n)
 				}
-				name := string(page[152 : 152+n])
-				if name != fmt.Sprintf("file-%03d", seen) || binary.LittleEndian.Uint64(page[48:]) != uint64(seen) || binary.LittleEndian.Uint32(page[100:])&0111 == 0 {
+				name := string(page[prefix+24 : prefix+24+n])
+				if name != fmt.Sprintf("file-%03d", seen) {
+					t.Fatalf("wrong directory entry at %d: %q", seen, name)
+				}
+				if prefix != 0 && (binary.LittleEndian.Uint64(page[48:]) != uint64(seen) || binary.LittleEndian.Uint32(page[100:])&0111 == 0) {
 					t.Fatalf("wrong directory entry or attrs at %d: %q %x", seen, name, page[:128])
 				}
-				next := binary.LittleEndian.Uint64(page[136:])
+				next := binary.LittleEndian.Uint64(page[prefix+8:])
 				if next <= offset {
 					t.Fatalf("directory offset did not advance")
 				}
@@ -171,11 +178,6 @@ func TestDirectVirtioProtocol(t *testing.T) {
 		if seen != 270 {
 			t.Fatalf("directory pass %d: %d entries", pass, seen)
 		}
-	}
-	release := make([]byte, 24)
-	binary.LittleEndian.PutUint64(release, fh)
-	if _, e := call(29, many, release); e != 0 {
-		t.Fatalf("releasedir: %d", e)
 	}
 
 	// The direct transport runs independent requests concurrently. Replies

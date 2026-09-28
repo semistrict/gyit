@@ -21,7 +21,7 @@ type viewRef struct {
 // ViewRefs reads every reference from one publication; HEAD remains the mounted
 // selection even when an importer publishes a newer branch tip.
 func (r *Repository) ViewRefs(ctx context.Context, current *Snapshot, opt ViewOptions, out io.Writer) error {
-	m, _, err := readHead(ctx, r.store)
+	m, err := r.queryManifest(ctx)
 	if err != nil {
 		return err
 	}
@@ -212,7 +212,7 @@ func (r *Repository) viewRefList(ctx context.Context, current *Snapshot, opt Vie
 	for _, row := range rows {
 		width = max(width, len(row.name))
 	}
-	objects := newViewRefIndex(&index{store: r.store, cache: r.cache, root: m.Root, blobRoot: m.Blobs})
+	objects := newViewRefIndex(r.progressive.historyIndex())
 	refidx := newViewRefIndex(&index{store: r.store, cache: r.cache, root: m.Refs})
 	var subjects map[string]string
 	if verbose || strings.Contains(format, "%(subject)") {
@@ -296,7 +296,7 @@ func viewAbbreviate(ctx context.Context, objects, refs viewRefScanner, oid strin
 		if err != nil {
 			return "", err
 		}
-		if len(a)+len(b) <= 1 {
+		if distinctMatches(a, b) <= 1 {
 			return oid[:n], nil
 		}
 	}
@@ -345,7 +345,7 @@ func (r *Repository) viewShowRef(ctx context.Context, current *Snapshot, opt Vie
 	if verify && len(patterns) == 0 {
 		return fmt.Errorf("show-ref --verify requires a reference")
 	}
-	objects := &index{store: r.store, cache: r.cache, root: m.Root, blobRoot: m.Blobs}
+	objects := r.progressive.historyIndex()
 	refidx := &index{store: r.store, cache: r.cache, root: m.Refs}
 	var selected []viewRef
 	if head {
@@ -542,7 +542,7 @@ func (r *Repository) viewRevParse(ctx context.Context, current *Snapshot, opt Vi
 		}
 		return fmt.Errorf("rev-parse --verify requires exactly one revision")
 	}
-	objects := &index{store: r.store, cache: r.cache, root: m.Root, blobRoot: m.Blobs}
+	objects := r.progressive.historyIndex()
 	refidx := &index{store: r.store, cache: r.cache, root: m.Refs}
 	for _, rev := range revisions {
 		refName := ""

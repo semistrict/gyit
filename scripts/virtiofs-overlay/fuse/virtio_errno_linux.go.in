@@ -1,0 +1,5 @@
+package fuse
+
+import "syscall"
+
+func linuxErrno(e syscall.Errno) int32 { return int32(e) }

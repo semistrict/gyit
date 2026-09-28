@@ -38,14 +38,11 @@ def main():
     mode.add_argument("--import-only", action="store_true")
     mode.add_argument("--skip-import", action="store_true")
     p.add_argument("--timeout", type=int, default=330)
-    p.add_argument("--workers", type=int, default=0, help="import worker count; 0 uses the executable default")
     p.add_argument("--clone-baseline", type=Path,
                    help="TSV from a measured local git clone --no-hardlinks")
     p.add_argument("--estimated-import-seconds", type=float,
                    help="upper-bound estimate supported by smaller experiments; required for a full import")
     a = p.parse_args()
-    if a.workers < 0:
-        p.error("--workers cannot be negative")
     a.source, a.store, a.gyit, a.output = (
         x.resolve() for x in (a.source, a.store, a.gyit, a.output)
     )
@@ -107,8 +104,6 @@ def main():
         if a.store.exists() and any(a.store.iterdir()):
             raise RuntimeError("fresh import requires an empty destination; use --skip-import for reads")
         cmd = [str(a.gyit), "import", "--repo", str(a.source), "--store", str(a.store)]
-        if a.workers:
-            cmd += ["--workers", str(a.workers)]
         rc, _, _ = run("import", "fresh", cmd, timeout=import_limit)
         if rc != 0:
             raise RuntimeError(issues[-1])

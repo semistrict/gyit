@@ -30,7 +30,7 @@ func (s *Snapshot) showCombined(ctx context.Context, current *Snapshot, parents 
 		if err != nil {
 			return err
 		}
-		snapshots[i] = &Snapshot{idx: s.idx, SHA: sha, Tree: tree}
+		snapshots[i] = &Snapshot{progressive: s.progressive, idx: s.idx, SHA: sha, Tree: tree}
 	}
 	return s.walkChanges(ctx, snapshots[0].Tree, s.Tree, matcher, func(name string, a, b Entry) error {
 		selected, err := matcher.Match(name, func(n string, requirements []pathspec.Requirement) (bool, error) {

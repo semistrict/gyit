@@ -21,6 +21,7 @@ import (
 	pb "gyit/internal/gen/gyit/control/v1"
 	"gyit/internal/repo"
 	"gyit/internal/store"
+
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -324,8 +325,8 @@ func TestMountedSwitchAndConcurrentPublisher(t *testing.T) {
 	if successes != 1 || conflicts != 1 {
 		t.Fatalf("publication results: successes=%d conflicts=%d", successes, conflicts)
 	}
-	if stats.DeltaChunks == 0 {
-		t.Fatal("mount fixture must exercise a delta-backed version")
+	if stats.Generation != second {
+		t.Fatalf("published snapshot %s, want %s", stats.Generation, second)
 	}
 	read(m1, "a", before)
 	read(m2, "a", before)

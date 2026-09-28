@@ -1,0 +1,96 @@
+syntax = "proto3";
+package gyit.storage.v1;
+option go_package = "gyit/internal/gen/gyit/storage/v1;storagev1";
+import "gyit/storage/v1/storage.proto";
+
+// Repository-wide incremental publications. HEAD contains
+// this manifest. Roots and every referenced pack/page are immutable.
+message ProgressiveManifest {
+  uint32 version = 1;
+  PageReference index = 2;
+}
+message ProgressiveObject {
+  string pack = 1;
+  int64 pack_size = 2;
+  int64 offset = 3;
+  int64 size = 4;
+}
+message ProgressiveSnapshot {
+  string commit = 1;
+  string tree = 2;
+  PageReference directory = 3;
+}
+// Gitlink entries deliberately have no child-directory reference.
+message ProgressiveEntry {
+  bytes name = 1;
+  string oid = 2;
+  uint32 mode = 3;
+  int64 size = 4;
+  PageReference directory = 5;
+  uint32 raw_mode = 6;
+}
+message ProgressiveDirectory {
+  repeated ProgressiveEntry entries = 1;
+  repeated DirectoryChild children = 2;
+}
+message ProgressiveState {
+  bool snapshot_complete = 1;
+  bool history_complete = 2;
+  string progress = 3;
+}
+
+// Ingested path history. No field depends on a query or its result count.
+message FileHistoryLink {
+  PageReference event = 1;
+  string commit = 2;
+  int64 time = 3;
+  // Minimum commit timestamp along the elided continuation, including event.
+  int64 gate = 4;
+}
+message FileHistoryState {
+  string oid = 1;
+  uint32 mode = 2;
+  FileHistoryLink normal = 3;
+  FileHistoryLink first_parent = 4;
+  PageReference directory = 5;
+  int64 directory_gate = 6;
+}
+message FileHistoryRoot {
+  FileHistoryState state = 1;
+  FileHistoryCommit commit = 2;
+  PageReference record = 3;
+}
+message FileHistoryCommit {
+  string sha = 1;
+  string tree = 2;
+  repeated string parents = 3;
+  CommitRecord metadata = 4;
+}
+message FileHistoryDirectory {
+  repeated FileHistoryEntry entries = 1;
+  repeated DirectoryChild children = 2;
+}
+message FileHistoryEntry {
+  bytes name = 1;
+  FileHistoryState state = 2;
+}
+message FileHistoryCursor {
+  string sha = 1;
+  int64 time = 2;
+  FileHistoryState state = 3;
+}
+message FileHistoryEvent {
+  PageReference commit = 1;
+  repeated FileHistoryCursor parents = 2;
+}
+
+// One evictable, uncompressed cache entry per immutable history container.
+message FileHistoryCachedContainer {
+  repeated FileHistoryCachedFrame frames = 1;
+}
+message FileHistoryCachedFrame {
+  int64 offset = 1;
+  int64 length = 2;
+  string hash = 3;
+  bytes data = 4;
+}

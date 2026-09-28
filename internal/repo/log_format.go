@@ -45,7 +45,7 @@ func WriteLogEntry(out io.Writer, e LogEntry, oneline bool) error {
 		fmt.Fprintf(&text, "\nDate:   %s\n\n", date.Format("Mon Jan 2 15:04:05 2006 -0700"))
 		if message != "" {
 			for _, line := range strings.Split(message, "\n") {
-				fmt.Fprintf(&text, "    %s\n", expandTabs(line))
+				fmt.Fprintf(&text, "    %s\n", expandTabs(strings.TrimRight(line, " \t\r\v\f")))
 			}
 		}
 		if e.MessageTruncated {

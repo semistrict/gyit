@@ -29,26 +29,23 @@ func readFrame(r io.Reader, message proto.Message) error {
 }
 
 func writeFrame(w io.Writer, message proto.Message) error {
-	data, err := proto.Marshal(message)
+	data, err := (proto.MarshalOptions{}).MarshalAppend(make([]byte, 4), message)
 	if err != nil {
 		return err
 	}
-	if len(data) == 0 || len(data) > maxFrame {
-		return fmt.Errorf("invalid control frame size %d", len(data))
+	if len(data) == 4 || len(data)-4 > maxFrame {
+		return fmt.Errorf("invalid control frame size %d", len(data)-4)
 	}
-	var header [4]byte
-	binary.BigEndian.PutUint32(header[:], uint32(len(data)))
-	for _, part := range [][]byte{header[:], data} {
-		for len(part) > 0 {
-			n, err := w.Write(part)
-			if err != nil {
-				return err
-			}
-			if n == 0 {
-				return io.ErrShortWrite
-			}
-			part = part[n:]
+	binary.BigEndian.PutUint32(data[:4], uint32(len(data)-4))
+	for len(data) > 0 {
+		n, err := w.Write(data)
+		if err != nil {
+			return err
 		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+		data = data[n:]
 	}
 	return nil
 }

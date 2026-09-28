@@ -49,6 +49,7 @@ func TestGlobalCacheBudgetPreservesRepositoryStore(t *testing.T) {
 			t.Fatal(err)
 		}
 		waitReady(t, f, p)
+		waitHistory(t, f, p)
 	}
 	before := storeContents(t, opts.DataDir)
 	for round := range 2 {
@@ -72,7 +73,7 @@ func TestGlobalCacheBudgetPreservesRepositoryStore(t *testing.T) {
 		}
 	}
 	if got := storeContents(t, opts.DataDir); !maps.Equal(got, before) {
-		t.Fatal("cache activity modified durable repository data")
+		t.Fatalf("cache activity modified durable repository data: before %d objects, after %d", len(before), len(got))
 	}
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
@@ -115,6 +116,18 @@ func storeContents(t *testing.T, root string) map[string][32]byte {
 			return err
 		}
 		if entry.IsDir() {
+			if strings.HasSuffix(entry.Name(), ".git") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Acquisition state and staging databases are not published objects.
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		parts := strings.Split(rel, string(filepath.Separator))
+		if len(parts) < 4 || parts[0] != progressiveDirectory || parts[2] != "objects" {
 			return nil
 		}
 		data, err := os.ReadFile(path)

@@ -94,6 +94,9 @@ func (f *controlFile) retry(operation func([]byte) (int, error), data []byte) (i
 			return 0, err
 		}
 		n, err := operation(data)
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
 		if !errors.Is(err, syscall.EAGAIN) {
 			return n, err
 		}
@@ -107,5 +110,41 @@ func (f *controlFile) retry(operation func([]byte) (int, error), data []byte) (i
 		}
 	}
 }
-func (f *controlFile) Read(p []byte) (int, error)  { return f.retry(f.File.Read, p) }
-func (f *controlFile) Write(p []byte) (int, error) { return f.retry(f.File.Write, p) }
+
+// A FUSE control file reports EAGAIN while a frame is being prepared, but it
+// does not implement poll notifications. os.File.Read would let Go's poller
+// wait indefinitely for an edge after EAGAIN. Keep retry ownership here while
+// RawConn protects descriptor lifetime against concurrent cancellation/Close.
+func (f *controlFile) Read(p []byte) (int, error)  { return f.io(p, false) }
+func (f *controlFile) Write(p []byte) (int, error) { return f.io(p, true) }
+func (f *controlFile) io(p []byte, write bool) (int, error) {
+	raw, err := f.File.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	return f.retry(func(b []byte) (n int, err error) {
+		operation := raw.Read
+		if write {
+			operation = raw.Write
+		}
+		pollErr := operation(func(fd uintptr) bool {
+			if write {
+				n, err = syscall.Write(int(fd), b)
+			} else {
+				n, err = syscall.Read(int(fd), b)
+			}
+			// Always finish this callback, including on EAGAIN: retry() owns the wait.
+			return true
+		})
+		if pollErr != nil {
+			return 0, pollErr
+		}
+		if n < 0 {
+			n = 0
+		}
+		if !write && n == 0 && err == nil {
+			err = io.EOF
+		}
+		return n, err
+	}, p)
+}

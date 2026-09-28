@@ -24,6 +24,7 @@ final class GyitItem: FSItem {
     // Only a bounded continuation window is retained. Older cookies can restart
     // scanning; directory contents are immutable for this volume's lifetime.
     var cursors: [UInt64: Data] = [0: Data()]
+    var cursorGeneration: UInt64 = 0
     let cursorLock = NSLock()
     init(path: Data, entry: GyitEntry) { self.path = path; self.storedEntry = entry; super.init() }
     var kind: FSItem.ItemType {
@@ -75,25 +76,26 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
     deinit { GyitClose(handle) }
     func route(_ path: Data) throws -> (UInt64, Data) { (handle, path) }
     func item(_ path: Data) throws -> GyitItem {
-        itemLock.lock(); defer { itemLock.unlock() }
         if path.isEmpty { return root }
-        // Capture before lookup: a lookup may itself publish the snapshot.
-        // In that case the next request must refresh the pre-publication item.
         let generation = withPath(path) { GyitGeneration(handle, $0) }
-        if let item = items[path] {
-            if generation > 1 && item.generation == generation { return item }
-            var fresh = GyitEntry()
-            try checked(withPath(path) { GyitLookup(handle, $0, &fresh) })
-            item.entry = fresh
-            item.generation = generation
-            return item
+        itemLock.lock()
+        if let existing = items[path], generation > 1 && existing.generation == generation {
+            itemLock.unlock(); return existing
         }
+        itemLock.unlock()
+        // Hydration can wait on the network. Never hold the volume-wide item
+        // registry lock while crossing into Go.
         let (h, relative) = try route(path)
-        var e = GyitEntry()
-        try checked(withPath(relative) { GyitLookup(h, $0, &e) })
-        let item = GyitItem(path: path, entry: e)
-        item.generation = generation
-        items[path] = item; return item
+        var entry = GyitEntry()
+        try checked(withPath(relative) { GyitLookup(h, $0, &entry) })
+        itemLock.lock(); defer { itemLock.unlock() }
+        if let existing = items[path] {
+            existing.entry = entry; existing.generation = generation
+            return existing
+        }
+        let result = GyitItem(path: path, entry: entry)
+        result.generation = generation; items[path] = result
+        return result
     }
     var supportedVolumeCapabilities: FSVolume.SupportedCapabilities {
         let c = FSVolume.SupportedCapabilities(); c.supportsSymbolicLinks = true
@@ -122,23 +124,30 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
         itemLock.unlock(); replyHandler(nil)
     }
     func lookupItem(named name: FSFileName, inDirectory directory: FSItem, replyHandler: @escaping (FSItem?, FSFileName?, Error?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
         guard let dir = directory as? GyitItem, !name.data.isEmpty, !name.data.contains(47), !name.data.contains(0) else { return replyHandler(nil,nil,posix(EINVAL)) }
         do {
-            let found = try item(childPath(dir.path,name.data))
+            let found = try self.item(childPath(dir.path,name.data))
             replyHandler(found,name,nil)
         } catch {
             replyHandler(nil,nil,error)
         }
+        }
     }
     func getAttributes(_ request: FSItem.GetAttributesRequest, of item: FSItem, replyHandler: @escaping (FSItem.Attributes?, Error?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
         guard let item = item as? GyitItem else { return replyHandler(nil,posix(EINVAL)) }
         do { replyHandler(try self.item(item.path).attrs,nil) } catch { replyHandler(nil,error) }
+        }
     }
     func enumerateDirectory(_ directory: FSItem, startingAt cookie: FSDirectoryCookie, verifier: FSDirectoryVerifier, attributes: FSItem.GetAttributesRequest?, packer: FSDirectoryEntryPacker, replyHandler: @escaping (FSDirectoryVerifier, Error?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
         guard let dir = directory as? GyitItem else { return replyHandler(verifier,posix(EINVAL)) }
         dir.cursorLock.lock(); defer { dir.cursorLock.unlock() }
-        let generation = withPath(dir.path) { GyitGeneration(handle, $0) }
-        if verifier.rawValue != 0 && verifier.rawValue != generation { dir.cursors = [0:Data()] }
+        let generation = withPath(dir.path) { GyitGeneration(self.handle, $0) }
+        if dir.cursorGeneration != generation {
+            dir.cursors = [0:Data()]; dir.cursorGeneration = generation
+        }
         let currentVerifier = FSDirectoryVerifier(rawValue:generation)
         var ordinal = verifier.rawValue != 0 && verifier.rawValue != generation ? 0 : UInt64(cookie.rawValue)
         let bias: UInt64 = attributes == nil ? 2 : 0
@@ -150,7 +159,7 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
             if ordinal == 1 {
                 let parentPath = dir.path.lastIndex(of:47).map { Data(dir.path[..<$0]) } ?? Data()
                 do {
-                    let parent = try item(parentPath)
+                    let parent = try self.item(parentPath)
                     if !packer.packEntry(name:FSFileName(string:".."),itemType:.directory,itemID:parent.attrs.fileID,nextCookie:FSDirectoryCookie(rawValue:2),attributes:nil) { return replyHandler(currentVerifier,nil) }
                 } catch { return replyHandler(verifier,error) }
                 ordinal = 2
@@ -162,7 +171,7 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
         do {
             while true {
                 var entries: UnsafeMutablePointer<GyitEntry>?; var count: Int32 = 0
-                let (h, relative) = try route(dir.path)
+                let (h, relative) = try self.route(dir.path)
                 try checked(withPath(relative) { path in withPath(after) { GyitList(h,path,$0,&entries,&count) } })
                 guard let entries else { if scanned < ordinal { throw posix(EINVAL) }; break }
                 defer { GyitFreeEntries(entries,count) }
@@ -191,20 +200,28 @@ final class GyitVolume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
             }
             replyHandler(currentVerifier,nil)
         } catch { replyHandler(verifier,error) }
+        }
     }
     func read(from item: FSItem, at offset: off_t, length: Int, into buffer: FSMutableFileDataBuffer, replyHandler: @escaping (Int, Error?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
         guard let item = item as? GyitItem, length >= 0 else { return replyHandler(0,posix(EINVAL)) }
         var count: Int32 = 0
-        guard let (h, relative) = try? route(item.path) else { return replyHandler(0,posix(EISDIR)) }
+        guard let (h, relative) = try? self.route(item.path) else { return replyHandler(0,posix(EISDIR)) }
         let code = buffer.withUnsafeMutableBytes { buffer in withPath(relative) { GyitRead(h,$0,offset,buffer.baseAddress,Int32(min(length,buffer.count,8<<20)),&count) } }
         replyHandler(Int(count),code == 0 ? nil : posix(code))
+        }
     }
     func readSymbolicLink(_ item: FSItem, replyHandler: @escaping (FSFileName?, Error?) -> Void) {
-        guard let item = item as? GyitItem, item.entry.size >= 0, item.entry.size <= 1<<20 else { return replyHandler(nil,posix(EINVAL)) }
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+        guard let original = item as? GyitItem else { return replyHandler(nil,posix(EINVAL)) }
+        let item: GyitItem
+        do { item = try self.item(original.path) } catch { return replyHandler(nil,error) }
+        guard item.entry.size >= 0, item.entry.size <= 1<<20 else { return replyHandler(nil,posix(EINVAL)) }
         var data = Data(count:Int(item.entry.size)); var n: Int32 = 0
-        guard let (h, relative) = try? route(item.path) else { return replyHandler(nil,posix(EINVAL)) }
+        guard let (h, relative) = try? self.route(item.path) else { return replyHandler(nil,posix(EINVAL)) }
         let code = data.withUnsafeMutableBytes { bytes in withPath(relative) { GyitRead(h,$0,0,bytes.baseAddress,Int32(bytes.count),&n) } }
         if code != 0 { return replyHandler(nil,posix(code)) }; replyHandler(FSFileName(data:data.prefix(Int(n))),nil)
+        }
     }
     func write(contents: Data, to item: FSItem, at offset: off_t, replyHandler: @escaping (Int, Error?) -> Void) { replyHandler(0,posix(EROFS)) }
     func setAttributes(_ attributes: FSItem.SetAttributesRequest, on item: FSItem, replyHandler: @escaping (FSItem.Attributes?, Error?) -> Void) {

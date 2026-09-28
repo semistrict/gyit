@@ -29,6 +29,23 @@ The app requires macOS 27. Click **Mount 🍑gyit**, then enter a path such as
 setup. Read `NOTICE` for progress; the complete file tree replaces it when ready.
 Touch the synthetic `NOTICE` to retry a failed setup. Repository files remain
 read-only, including any real `NOTICE` after setup succeeds.
+Run `gyit update` anywhere inside a repository to resolve its mounted identifier
+again. An unqualified repository follows the remote default branch; `@branch`
+and `@tag` follow that branch or tag, including moved tags and force-pushes.
+A full `@SHA` stays pinned. Files remain readable during preparation; a failed
+update leaves the current checkout in place. Unchanged paths retain their inode
+numbers. Other mounted identifiers are not advanced by this command.
+
+`gyit log` reads history from the progressive object store and fetches missing
+history objects on demand. Native `git` commands remain deferred on this storage
+path. These commands discover the repository from the current directory:
+
+```sh
+cd /Volumes/gyit/github.com/torvalds/linux
+gyit log --oneline -n 5
+gyit update
+```
+
 Only public repositories are supported for now. The extension uses the actual
 Git binary from the installed Xcode or Command Line Tools, since `/usr/bin/git`
 is an xcrun launcher that cannot run inside App Sandbox.
