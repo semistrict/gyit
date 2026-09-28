@@ -9,12 +9,19 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// decodedCache is the platform boundary for persistent decoded byte leases.
+// A nil implementation uses the same reader with its bounded in-memory LRU.
+type decodedCache interface {
+	Load(context.Context, string, func() ([]byte, error)) ([]byte, func(), error)
+	Close() error
+}
+
 type cached struct {
 	key  string
 	data []byte
 }
 type cache struct {
-	disk      *store.DiskCache
+	disk      decodedCache
 	mu        sync.Mutex
 	max, used int
 	items     map[string]*list.Element

@@ -52,33 +52,11 @@ func New(s store.Store, cacheBytes int) (*Repository, error) {
 	if cacheBytes < 0 {
 		return nil, fmt.Errorf("cache size cannot be negative")
 	}
-	p, err := NewProgressive(context.Background(), s, nil, os.TempDir())
+	p, err := newProgressive(context.Background(), s, nil, os.TempDir())
 	if err != nil {
 		return nil, err
 	}
 	p.cache = newCache(cacheBytes)
-	r := p.HistoryRepository()
-	r.refresh = true
-	return r, nil
-}
-func NewDisk(s store.Store, dir, identity string, budget int64) (*Repository, error) {
-	disk, err := store.NewDiskCache(nil, dir, identity, budget)
-	if err != nil {
-		return nil, err
-	}
-	r, err := NewSharedDisk(s, disk)
-	if err != nil {
-		disk.Close()
-		return nil, err
-	}
-	r.borrowedDisk = false
-	return r, nil
-}
-func NewSharedDisk(s store.Store, disk *store.DiskCache) (*Repository, error) {
-	p, err := NewProgressive(context.Background(), s, disk, os.TempDir())
-	if err != nil {
-		return nil, err
-	}
 	r := p.HistoryRepository()
 	r.refresh = true
 	return r, nil
@@ -159,7 +137,7 @@ func (r *Repository) refreshRoot(ctx context.Context) error {
 	p := r.progressive
 	p.writer.Lock()
 	defer p.writer.Unlock()
-	latest, err := NewProgressive(ctx, r.store, r.cache.disk, p.temp)
+	latest, err := newProgressive(ctx, r.store, r.cache.disk, p.temp)
 	if err != nil {
 		return err
 	}

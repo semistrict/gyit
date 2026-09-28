@@ -31,7 +31,7 @@ func (r *Repository) View(ctx context.Context, current *Snapshot, opt ViewOption
 	if err != nil {
 		return err
 	}
-	p, err := NewProgressive(ctx, viewStore{Store: r.store, head: head, token: token}, r.cache.disk, r.progressive.temp)
+	p, err := newProgressive(ctx, viewStore{Store: r.store, head: head, token: token}, r.cache.disk, r.progressive.temp)
 	if err != nil {
 		return err
 	}

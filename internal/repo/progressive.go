@@ -3,20 +3,15 @@ package repo
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
+	"google.golang.org/protobuf/proto"
+	pb "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 	"path/filepath"
 	"strings"
 	"sync"
-
-	pb "gyit/internal/gen/gyit/storage/v1"
-	"gyit/internal/store"
-
-	bolt "go.etcd.io/bbolt"
-	"google.golang.org/protobuf/proto"
 )
 
 // Progressive is a repository-wide immutable object pool. Acquisition belongs
@@ -37,7 +32,7 @@ type Progressive struct {
 	historyBuild    chan struct{}
 }
 
-func NewProgressive(ctx context.Context, backend store.Store, disk *store.DiskCache, temp string) (*Progressive, error) {
+func newProgressive(ctx context.Context, backend store.Store, disk decodedCache, temp string) (*Progressive, error) {
 	p := &Progressive{store: backend, cache: newCache(0), temp: temp, slots: make(chan struct{}, 2), historyBuild: make(chan struct{}, 1)}
 	p.cache.disk = disk
 	b, token, err := backend.Get(ctx, "HEAD", 0, -1)
@@ -77,90 +72,6 @@ func (p *Progressive) get(ctx context.Context, key string, m proto.Message) erro
 		}
 	}
 	return p.index().get(ctx, key, m)
-}
-func (p *Progressive) stage(fn func(*bolt.Bucket) error) error {
-	f, err := os.CreateTemp(p.temp, "progressive-*.db")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	f.Close()
-	defer os.Remove(name)
-	db, err := bolt.Open(name, 0600, &bolt.Options{NoSync: true})
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	return db.Update(func(tx *bolt.Tx) error {
-		b, e := tx.CreateBucket([]byte("changes"))
-		if e != nil {
-			return e
-		}
-		return fn(b)
-	})
-}
-func progressivePut(b *bolt.Bucket, key string, m proto.Message) error {
-	raw, e := proto.MarshalOptions{Deterministic: true}.Marshal(m)
-	if e != nil {
-		return e
-	}
-	return b.Put([]byte(key), raw)
-}
-
-// publish is called with writer held. Failed CAS leaves the current view intact.
-func (p *Progressive) publish(ctx context.Context, b *bolt.Bucket) error {
-	return p.publishUploads(ctx, b, nil)
-}
-func (p *Progressive) publishUploads(ctx context.Context, b *bolt.Bucket, uploads *publicationUploads) error {
-	backend := p.store
-	if uploads != nil {
-		backend = uploads
-	}
-	idx := p.index()
-	idx.store = backend
-	root, err := idx.update(ctx, b)
-	if err != nil {
-		return err
-	}
-	raw, err := proto.Marshal(&pb.ProgressiveManifest{Version: 1, Index: encodePageRef(root)})
-	if err != nil {
-		return err
-	}
-	key := fmt.Sprintf("generations/%x", sha256.Sum256(raw))
-	if err = backend.Put(ctx, key, raw, ""); err != nil {
-		return err
-	}
-	if uploads != nil {
-		if err = uploads.wait(); err != nil {
-			return err
-		}
-	}
-	var token string
-	if writer, ok := p.store.(store.VersionedWriter); ok {
-		token, err = writer.PutVersion(ctx, "HEAD", raw, p.token)
-		if err != nil {
-			return err
-		}
-		if token == "" || token == "*" {
-			return fmt.Errorf("invalid publication version")
-		}
-	} else {
-		if err = p.store.Put(ctx, "HEAD", raw, p.token); err != nil {
-			return err
-		}
-		var head []byte
-		head, token, err = p.store.Get(ctx, "HEAD", 0, -1)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(raw, head) {
-			return store.ErrConflict
-		}
-	}
-	p.mu.Lock()
-	p.root, p.token = root, token
-	p.mu.Unlock()
-	return nil
 }
 func (p *Progressive) ObjectSize(ctx context.Context, oid string) (int64, error) {
 	if source, ok := ctx.Value(historySourceKey{}).(*historySource); ok {
@@ -215,16 +126,6 @@ func (p *Progressive) Open(ctx context.Context, sha string) (*Snapshot, error) {
 		return nil, err
 	}
 	return &Snapshot{SHA: sha, Tree: tree, progressive: p, idx: p.historyIndex()}, nil
-}
-func (p *Progressive) SetState(ctx context.Context, sha string, state *pb.ProgressiveState) error {
-	p.writer.Lock()
-	defer p.writer.Unlock()
-	return p.stage(func(b *bolt.Bucket) error {
-		if err := progressivePut(b, "state/"+sha, state); err != nil {
-			return err
-		}
-		return p.publish(ctx, b)
-	})
 }
 func (p *Progressive) State(ctx context.Context, sha string) (*pb.ProgressiveState, error) {
 	s := &pb.ProgressiveState{}
