@@ -3,6 +3,7 @@ package controlcli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,6 +61,23 @@ func TestLogMatchesNativeGit(t *testing.T) {
 	date = "1000000070 +0000"
 	git("rm", "-q", "root")
 	git("commit", "-qm", "Delete root")
+	// Cross both the former default page and the former thousand-result cap.
+	base := strings.TrimSpace(git("rev-parse", "main"))
+	var history strings.Builder
+	for i := 0; i < 1025; i++ {
+		data, message := fmt.Sprint(i), fmt.Sprintf("Main change %d", i)
+		fmt.Fprintf(&history, "blob\nmark :%d\ndata %d\n%s\n", i+1, len(data), data)
+		fmt.Fprintf(&history, "commit refs/heads/main\ncommitter Test <test@example.test> 1000000070 +0000\ndata %d\n%s\n", len(message), message)
+		if i == 0 {
+			fmt.Fprintf(&history, "from %s\n", base)
+		}
+		fmt.Fprintf(&history, "M 100644 :%d main\n\n", i+1)
+	}
+	importer := exec.Command("git", "-C", source, "fast-import", "--quiet")
+	importer.Stdin = strings.NewReader(history.String())
+	if out, err := importer.CombinedOutput(); err != nil {
+		t.Fatalf("history fixture: %v %s", err, out)
+	}
 	storage, err := store.NewLocal(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +103,7 @@ func TestLogMatchesNativeGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer server.Close()
-	for _, flags := range [][]string{{}, {"--oneline"}, {"-n", "2"}, {"--oneline", "-n3", "topic", "--"}, {"--first-parent"}, {"--first-parent", "--oneline"}, {"--max-count=1", "main~1"}, {"-n", "0"}, {"sub/file"}, {"--", "root"}, {"--", "sub"}, {"--", "topic"}, {"main", "--", "root"}, {"--first-parent", "--", "topic"}, {"--", "missing"}, {"--", "root", "topic"}, {"--", ":(glob)**/file"}} {
+	for _, flags := range [][]string{{}, {"--oneline"}, {"--max-count=1001"}, {"-n", "2"}, {"--oneline", "-n3", "topic", "--"}, {"--first-parent"}, {"--first-parent", "--oneline"}, {"--max-count=1", "main~1"}, {"-n", "0"}, {"sub/file"}, {"--", "root"}, {"--", "sub"}, {"--", "topic"}, {"--", "main"}, {"main", "--", "root"}, {"--first-parent", "--", "topic"}, {"--", "missing"}, {"--", "root", "topic"}, {"--", ":(glob)**/file"}} {
 		gitArgs := append([]string{"log", "--no-decorate", "--no-color", "--abbrev=7"}, flags...)
 		// These arguments are shared verbatim, including the revision/path separator.
 		want := git(gitArgs...)
@@ -101,7 +119,7 @@ func TestLogMatchesNativeGit(t *testing.T) {
 			t.Fatal("log changed the mounted checkout")
 		}
 	}
-	for _, args := range [][]string{{"-n", "-1"}, {"-n", "1001"}, {"--timeout", "0s"}, {"main", "topic"}, {"--unknown"}, {"missing-branch"}, {"topic"}, {"main"}, {"root"}} {
+	for _, args := range [][]string{{"-n", "-1"}, {"-n", "2147483648"}, {"--timeout", "-1s"}, {"main", "topic"}, {"--unknown"}, {"missing-branch"}, {"topic"}, {"main"}, {"root"}} {
 		var stdout, stderr bytes.Buffer
 		if err := Run(ctx, append([]string{"log", "--socket", socket}, args...), &stdout, &stderr); err == nil {
 			t.Fatal("accepted invalid log", args)

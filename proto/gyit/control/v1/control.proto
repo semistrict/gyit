@@ -85,7 +85,8 @@ message MountEndpoint {
 // Log streams one LogEntry per frame, then LogEnd. An Error terminates a stream.
 message LogRequest {
   string revision = 1;
-  // Zero selects the default of 20; maximum 1000.
+  // Zero selects the legacy default of 20 unless unlimited is true.
+  // Explicit CLI -n 0 is handled without starting a request.
   uint32 max_count = 2;
   bool first_parent = 3;
   repeated bytes paths = 4;
@@ -95,6 +96,8 @@ message LogRequest {
   bytes path_prefix = 7;
   // Normal log displays full commit IDs; avoid unused abbreviation lookups.
   bool full_commit_ids = 8;
+  // Stream until true end of history or client cancellation.
+  bool unlimited = 9;
 }
 
 message LogEntry {

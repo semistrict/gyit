@@ -22,7 +22,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && IsViewCommand(args[0]) {
 		run := func(ctx context.Context, out io.Writer) error { return runView(ctx, args, out) }
 		if args[0] == "show" {
-			return pageLog(ctx, stdout, stderr, run)
+			return pageOutput(ctx, stdout, stderr, run, true)
 		}
 		return run(ctx, stdout)
 	}

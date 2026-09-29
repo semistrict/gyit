@@ -20,11 +20,10 @@ func number(data []byte, pos *int) (uint64, error) {
 	}
 	return 0, fmt.Errorf("varint overflow")
 }
-func apply(base, program []byte) ([]byte, error) {
-	return applyLimit(base, program, ChunkSize)
-}
 
-func applyLimit(base, program []byte, limit uint64) ([]byte, error) {
+// Reserve the cache's object-kind prefix in the result allocation. Instructions
+// still address only the base payload, and cannot write into the reserved bytes.
+func applyLimitPrefix(base, program []byte, limit uint64, prefix int) ([]byte, error) {
 	pos := 0
 	n, e := number(program, &pos)
 	if e != nil || n != uint64(len(base)) {
@@ -34,7 +33,10 @@ func applyLimit(base, program []byte, limit uint64) ([]byte, error) {
 	if e != nil || n > limit {
 		return nil, fmt.Errorf("delta result limit")
 	}
-	out := make([]byte, 0, int(n))
+	if prefix < 0 || n > uint64(int(^uint(0)>>1)-prefix) {
+		return nil, fmt.Errorf("delta allocation bounds")
+	}
+	out := make([]byte, prefix, prefix+int(n))
 	for pos < len(program) {
 		op := program[pos]
 		pos++

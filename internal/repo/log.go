@@ -1,21 +1,19 @@
 package repo
 
 import (
-	"container/heap"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 
+	pb "gyit/internal/gen/gyit/storage/v1"
 	"gyit/internal/pathspec"
 	"gyit/internal/store"
 )
 
 const DefaultLogCount = 20
-const MaxLogCount = 1000
-const maxLogFrontier = 4096
+const MaxLogCount = 1<<31 - 1
 const maxLogParents = 512
-const maxLogVisited = 100000
 
 var ErrLogMetadata = errors.New("commit display metadata is missing; re-run import")
 
@@ -30,10 +28,11 @@ type LogEntry struct {
 }
 
 type logCandidate struct {
-	sha   string
-	time  int64
-	order int
-	path  string
+	location *pb.HistoryBatchLocation
+	sha      string
+	time     int64
+	order    int
+	path     string
 }
 type logQueue []logCandidate
 
@@ -56,7 +55,8 @@ func (q *logQueue) Pop() any {
 
 // Log visits only enough ancestors to satisfy the requested count. Merge
 // histories use committer-date priority, suppressing duplicate ancestors.
-// The queue, visited set, record sizes and count all have hard upper bounds.
+// The queue and visited set spill to query-local scratch storage; decoded
+// records and in-memory traversal state remain bounded.
 func (s *Snapshot) Log(ctx context.Context, count int, firstParent bool, emit func(LogEntry) error) error {
 	return s.LogPaths(ctx, count, firstParent, nil, emit)
 }
@@ -70,6 +70,7 @@ func (s *Snapshot) LogPaths(ctx context.Context, count int, firstParent bool, pa
 
 type LogOptions struct {
 	Count               int
+	Unlimited           bool // Ignore Count and stream until EOF or cancellation.
 	FirstParent, Follow bool
 	FullCommitIDs       bool // Skip unused commit abbreviations; merge parent IDs still abbreviate.
 	Paths               []string
@@ -78,7 +79,7 @@ type LogOptions struct {
 	AttributeSource *Snapshot
 }
 
-func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func(LogEntry) error) error {
+func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func(LogEntry) error) (resultErr error) {
 	count, firstParent := opt.Count, opt.FirstParent
 	matcher, err := pathspec.Compile(opt.Paths, opt.Prefix)
 	if err != nil {
@@ -102,9 +103,9 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 	}
 
 	if count < 0 || count > MaxLogCount {
-		return invalidRevision("log count must be between 0 and 1000")
+		return invalidRevision(fmt.Sprintf("log count must be between 0 and %d", MaxLogCount))
 	}
-	if count == 0 {
+	if count == 0 && !opt.Unlimited {
 		return nil
 	}
 	if !opt.Follow && len(paths) == 1 && s.progressive != nil {
@@ -112,34 +113,19 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 	}
 	linear := true
 	baseCtx := ctx
+	if opt.Unlimited {
+		count = 64 // Bounded acquisition hint, not a result limit.
+	}
 	ctx = context.WithValue(ctx, commitFetchDepth{}, count)
-	queue := &logQueue{}
-	seen := map[string]bool{}
-	seenBytes := 0
-	key := func(sha, name string) string {
-		if opt.Follow {
-			return sha + "\x00" + name
-		}
-		return sha
+	temp := ""
+	if s.progressive != nil {
+		temp = s.progressive.temp
 	}
-	mark := func(sha, name string) error {
-		k := key(sha, name)
-		if seen[k] {
-			return nil
-		}
-		if len(seen) >= maxLogVisited || seenBytes+len(k)+32 > 16<<20 {
-			return fmt.Errorf("log visited-history budget exceeded")
-		}
-		seen[k] = true
-		seenBytes += len(k) + 32
-		return nil
-	}
+	walk := newLogTraversal(ctx, temp)
+	defer func() { resultErr = errors.Join(resultErr, walk.close()) }()
 	add := func(sha, name string) error {
-		if seen[key(sha, name)] {
-			return nil
-		}
-		if len(*queue) >= maxLogFrontier || len(seen) >= maxLogVisited {
-			return fmt.Errorf("log history frontier exceeds bounded traversal limit; use --first-parent")
+		if seen, err := walk.has(sha, name); err != nil || seen {
+			return err
 		}
 		var info commitInfo
 		if err := s.idx.get(ctx, "c/"+sha, &info); err != nil {
@@ -148,20 +134,22 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 			}
 			return err
 		}
-		heap.Push(queue, logCandidate{sha: sha, time: info.CommitTime, order: len(seen), path: name})
-		if err := mark(sha, name); err != nil {
-			return err
-		}
-		return nil
+		return walk.push(logCandidate{sha: sha, time: info.CommitTime, path: name})
 	}
 	if err := add(s.SHA, followPath); err != nil {
 		return err
 	}
-	for written := 0; queue.Len() > 0 && written < count; {
+	for written := 0; opt.Unlimited || written < count; {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		candidate := heap.Pop(queue).(logCandidate)
+		candidate, ok, err := walk.pop()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
 
 		if opt.Follow {
 			paths = []string{candidate.path}
@@ -219,7 +207,7 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 				return err
 			}
 			written++
-			if written == count {
+			if !opt.Unlimited && written == count {
 				break
 			}
 		}
@@ -229,10 +217,15 @@ func (s *Snapshot) LogWithOptions(ctx context.Context, opt LogOptions, emit func
 			// Before the first fork, every visited commit is a descendant of the
 			// sole continuation. None can reappear in its ancestry. Do not retain
 			// an unbounded chain of unchanged commits for sparse file histories.
-			clear(seen)
-			seenBytes = 0
+			if err := walk.clearSeen(); err != nil {
+				return err
+			}
 		}
-		ctx = context.WithValue(baseCtx, commitFetchDepth{}, count-written)
+		remaining := count - written
+		if opt.Unlimited {
+			remaining = 64
+		}
+		ctx = context.WithValue(baseCtx, commitFetchDepth{}, remaining)
 		for _, parent := range next {
 			name := candidate.path
 			if opt.Follow {
@@ -276,6 +269,17 @@ func (s *Snapshot) logPathEntries(ctx context.Context, sha string, paths []strin
 // Walk native trees directly: filesystem Resolve may acquire missing blobs to
 // prepare exact stat sizes, which is unnecessary for log on a blobless store.
 func (s *Snapshot) logPathEntry(ctx context.Context, path string) (Entry, error) {
+	if strings.HasSuffix(path, "/") {
+		name := strings.TrimSuffix(path, "/")
+		if name == "." {
+			name = ""
+		}
+		e, err := s.logPathEntry(ctx, name)
+		if e.Mode != 0040000 {
+			e = Entry{}
+		}
+		return e, err
+	}
 	if path == "" {
 		return Entry{OID: s.Tree, Mode: 0040000}, nil
 	}

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	pb "gyit/internal/gen/gyit/storage/v1"
+	"io"
 	"sort"
 )
 
@@ -18,14 +19,41 @@ type historyPack struct {
 	count       int
 }
 type historySource struct {
-	packs []historyPack
-	cache *cache
+	// Only completed, immutable Git acquisition packs may skip a second OID
+	// hash. Store recipes and bytes (including delta bases) remain untrusted.
+	indexedByGit bool
+	packs        []historyPack
+	cache        *cache
+	// Decoder workspaces belong to this acquisition view and die with it.
+	// Retain at most four, matching the bounded object decode concurrency.
+	inflaters chan io.ReadCloser
 }
 
-func (s *historySource) lookup(oid string) (*pb.ProgressiveObject, error) {
+func (s *historySource) inflater(r io.Reader) (io.ReadCloser, error) {
+	select {
+	case z := <-s.inflaters:
+		if err := z.(zlib.Resetter).Reset(r, nil); err != nil {
+			z.Close()
+			return nil, err
+		}
+		return z, nil
+	default:
+		return zlib.NewReader(r)
+	}
+}
+
+func (s *historySource) releaseInflater(z io.ReadCloser) {
+	z.Close()
+	select {
+	case s.inflaters <- z:
+	default:
+	}
+}
+
+func (s *historySource) locate(oid string) (*pb.ProgressiveObject, []byte, error) {
 	id, err := hex.DecodeString(oid)
 	if err != nil || len(id) != 20 {
-		return nil, fmt.Errorf("invalid object identity")
+		return nil, nil, fmt.Errorf("invalid object identity")
 	}
 	for _, p := range s.packs {
 		n := p.count
@@ -37,39 +65,50 @@ func (s *historySource) lookup(oid string) (*pb.ProgressiveObject, error) {
 		if off&0x80000000 != 0 {
 			pos := uint64(1032+28*n) + 8*(off&0x7fffffff)
 			if pos+8 > uint64(len(p.index)-40) {
-				return nil, fmt.Errorf("pack offset bounds")
+				return nil, nil, fmt.Errorf("pack offset bounds")
 			}
 			off = binary.BigEndian.Uint64(p.index[pos:])
 		}
 		if off < 12 || off >= uint64(len(p.data)-20) {
-			return nil, fmt.Errorf("pack offset bounds")
+			return nil, nil, fmt.Errorf("pack offset bounds")
 		}
-		r := bytes.NewReader(p.data[off : len(p.data)-20])
-		kind, size, _, _, err := progressiveHeader(r, int64(off))
+		return &pb.ProgressiveObject{Pack: p.id, PackSize: int64(len(p.data)), Offset: int64(off)}, p.data[off : len(p.data)-20], nil
+	}
+	return nil, nil, nil
+}
+
+// Size queries need the delta result length. Decoders instead use locate and
+// validate the lengths while decoding, avoiding a second zlib pass.
+func (s *historySource) lookup(oid string) (*pb.ProgressiveObject, error) {
+	o, raw, err := s.locate(oid)
+	if err != nil || o == nil {
+		return o, err
+	}
+	r := bytes.NewReader(raw)
+	kind, size, _, _, err := progressiveHeader(r, o.Offset)
+	if err != nil {
+		return nil, err
+	}
+	if kind == 6 || kind == 7 {
+		z, err := s.inflater(r)
 		if err != nil {
 			return nil, err
 		}
-		if kind == 6 || kind == 7 {
-			z, err := zlib.NewReader(r)
-			if err != nil {
-				return nil, err
+		b := bufio.NewReaderSize(z, 32)
+		_, err = binary.ReadUvarint(b)
+		if err == nil {
+			var n uint64
+			n, err = binary.ReadUvarint(b)
+			if n > progressiveObjectLimit {
+				err = fmt.Errorf("delta result size")
 			}
-			b := bufio.NewReaderSize(z, 32)
-			_, err = binary.ReadUvarint(b)
-			if err == nil {
-				var n uint64
-				n, err = binary.ReadUvarint(b)
-				if n > progressiveObjectLimit {
-					err = fmt.Errorf("delta result size")
-				}
-				size = int64(n)
-			}
-			z.Close()
-			if err != nil {
-				return nil, err
-			}
+			size = int64(n)
 		}
-		return &pb.ProgressiveObject{Pack: p.id, PackSize: int64(len(p.data)), Offset: int64(off), Size: size}, nil
+		s.releaseInflater(z)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return nil, nil
+	o.Size = size
+	return o, nil
 }

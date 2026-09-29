@@ -4,20 +4,64 @@ package repo
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"golang.org/x/sys/unix"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	pb "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/store"
 )
 
 func (s *historySource) close() {
+	s.inflaters = nil
 	for _, p := range s.packs {
 		unix.Munmap(p.index)
 		unix.Munmap(p.data)
 	}
+}
+
+// A concurrent acquisition can finish a local pack before its durable import.
+// Such packs must not let coverage claim completion ahead of object publication.
+func (p *Progressive) publishedHistorySource(ctx context.Context, dirs []string) (*historySource, error) {
+	s, err := openHistorySource(dirs)
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]historyPack, 0, len(s.packs))
+	selected := make([]bool, len(s.packs))
+	for i, pack := range s.packs {
+		var published pb.ProgressiveObject
+		err := p.get(ctx, "pack/"+pack.id, &published)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			s.close()
+			return nil, err
+		}
+		if err == nil {
+			if published.Pack != pack.id || published.PackSize != int64(len(pack.data)) {
+				s.close()
+				return nil, fmt.Errorf("history acquisition pack identity mismatch")
+			}
+			kept = append(kept, pack)
+			selected[i] = true
+		}
+	}
+	// Do not unmap rejected entries until validation finishes: error cleanup
+	// still owns every mapping in the original slice.
+	for i, pack := range s.packs {
+		if !selected[i] {
+			unix.Munmap(pack.index)
+			unix.Munmap(pack.data)
+		}
+	}
+	s.packs = kept
+	return s, nil
 }
 func mapHistoryFile(path string) ([]byte, error) {
 	f, err := os.Open(path)
@@ -35,7 +79,9 @@ func mapHistoryFile(path string) ([]byte, error) {
 	return unix.Mmap(int(f.Fd()), 0, int(st.Size()), unix.PROT_READ, unix.MAP_PRIVATE)
 }
 func openHistorySource(dirs []string) (*historySource, error) {
-	s := &historySource{cache: newCache(32 << 20)}
+	// These directories contain completed packs indexed by the Git acquisition
+	// process. It already computed the object identities in their indexes.
+	s := &historySource{indexedByGit: true, cache: newCache(32 << 20), inflaters: make(chan io.ReadCloser, 4)}
 	for _, dir := range dirs {
 		files, err := filepath.Glob(filepath.Join(dir, "objects", "pack", "pack-*.idx"))
 		if err != nil {

@@ -22,7 +22,7 @@ func marshal(value any) ([]byte, error) {
 	case reference:
 		message = &storagev1.ReferenceRecord{Commit: v.Commit, ObjectId: v.ObjectID, SymbolicTarget: v.SymbolicTarget}
 	case commitInfo:
-		message = &storagev1.CommitRecord{Author: v.Author, AuthorTime: v.AuthorTime, AuthorOffsetMinutes: v.AuthorOffset, CommitTime: v.CommitTime, Message: v.Message, MessageTruncated: v.MessageTruncated, AuthorTruncated: v.AuthorTruncated, Committer: v.Committer, CommitterOffsetMinutes: v.CommitterOffset, CommitterTruncated: v.CommitterTruncated, HasCommitter: v.HasCommitter}
+		message = encodeCommitInfo(v)
 	case parents:
 		message = &storagev1.ParentRecord{Parents: v.Parents}
 	case page:
@@ -46,6 +46,10 @@ func marshal(value any) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported storage record type %T", value)
 	}
 	return proto.MarshalOptions{Deterministic: true}.Marshal(message)
+}
+
+func encodeCommitInfo(v commitInfo) *storagev1.CommitRecord {
+	return &storagev1.CommitRecord{Author: v.Author, AuthorTime: v.AuthorTime, AuthorOffsetMinutes: v.AuthorOffset, CommitTime: v.CommitTime, Message: v.Message, MessageTruncated: v.MessageTruncated, AuthorTruncated: v.AuthorTruncated, Committer: v.Committer, CommitterOffsetMinutes: v.CommitterOffset, CommitterTruncated: v.CommitterTruncated, HasCommitter: v.HasCommitter}
 }
 
 func unmarshal(data []byte, value any) error {

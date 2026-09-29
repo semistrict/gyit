@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -107,6 +108,12 @@ func TestGCSRangeAndPublicationWire(t *testing.T) {
 // This opt-in test uses a real bucket and two independent native GCS clients.
 // It deletes only its own temporary objects; bucket lifecycle belongs to caller.
 func TestGCSLiveRangeAndAtomicCAS(t *testing.T) {
+	testGCSLiveRangeAndAtomicCAS(t, storage.NewClient)
+}
+func TestGCSLiveGRPCRangeAndAtomicCAS(t *testing.T) {
+	testGCSLiveRangeAndAtomicCAS(t, storage.NewGRPCClient)
+}
+func testGCSLiveRangeAndAtomicCAS(t *testing.T, newClient func(context.Context, ...option.ClientOption) (*storage.Client, error)) {
 	bucket := os.Getenv("GYIT_GCS_TEST_BUCKET")
 	if bucket == "" {
 		t.Skip("set GYIT_GCS_TEST_BUCKET to a disposable GCS bucket")
@@ -118,7 +125,7 @@ func TestGCSLiveRangeAndAtomicCAS(t *testing.T) {
 	prefix := "adapter-test/" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	var stores []*gcsStore
 	for range 2 {
-		client, err := storage.NewClient(t.Context(), options...)
+		client, err := newClient(t.Context(), options...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +136,7 @@ func TestGCSLiveRangeAndAtomicCAS(t *testing.T) {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		for _, key := range []string{"HEAD", "empty", "large"} {
+		for _, key := range []string{"HEAD", "empty", "large", "compressed"} {
 			err := stores[0].object(key).Delete(ctx)
 			if err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
 				t.Errorf("cleanup temporary GCS object %s: %v", key, err)
@@ -182,6 +189,34 @@ func TestGCSLiveRangeAndAtomicCAS(t *testing.T) {
 	if b, _, err := s.Get(t.Context(), "empty", 0, -1); err != nil || len(b) != 0 {
 		t.Fatalf("empty object %q %v", b, err)
 	}
+	// Foreign content-encoding metadata must never change our byte offsets.
+	var compressed bytes.Buffer
+	zipper := gzip.NewWriter(&compressed)
+	if _, err := zipper.Write(bytes.Repeat([]byte("stored bytes\n"), 100)); err != nil {
+		t.Fatal(err)
+	}
+	if err := zipper.Close(); err != nil {
+		t.Fatal(err)
+	}
+	writer := s.object("compressed").NewWriter(t.Context())
+	writer.ContentEncoding = "gzip"
+	writer.ContentType = "text/plain"
+	if _, err := writer.Write(compressed.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bounds := range [][2]int64{{0, -1}, {5, 13}} {
+		got, _, err := stores[1].Get(t.Context(), "compressed", bounds[0], bounds[1])
+		want := compressed.Bytes()
+		if bounds[1] >= 0 {
+			want = want[bounds[0] : bounds[0]+bounds[1]]
+		}
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("stored gzip range %v: got=%d bytes want=%d bytes: %v", bounds, len(got), len(want), err)
+		}
+	}
 	// Cross the resumable-upload chunk boundary and read across it using the
 	// second client, as archive pack range reads do in a mounted repository.
 	large := bytes.Repeat([]byte("native-gcs-range\x00"), 600000)
@@ -219,5 +254,27 @@ func TestGCSPutReturnsAssignedGeneration(t *testing.T) {
 	}
 	if requests.Load() != 1 {
 		t.Fatalf("publication made %d requests", requests.Load())
+	}
+}
+
+// Range addressing and cached object hashes require original stored bytes.
+// Some foreign metadata combinations make GCS transcode even when compressed
+// reads were requested. Returning those bytes as a successful Get is invalid.
+func TestGCSRejectsTranscodedRead(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Goog-Generation", "42")
+		w.Header().Set("X-Goog-Stored-Content-Encoding", "gzip")
+		w.Header().Set("X-Goog-Stored-Content-Length", "30")
+		fmt.Fprint(w, "decompressed payload")
+	}))
+	defer server.Close()
+	client, err := storage.NewClient(t.Context(), option.WithEndpoint(server.URL), option.WithoutAuthentication())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	s := &gcsStore{client: client, bucket: "test-bucket"}
+	if data, _, err := s.Get(t.Context(), "object", 0, -1); err == nil || len(data) != 0 {
+		t.Fatalf("accepted transcoded object: %q %v", data, err)
 	}
 }

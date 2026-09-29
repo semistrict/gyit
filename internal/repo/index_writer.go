@@ -12,17 +12,39 @@ import (
 	"gyit/internal/spill"
 	"gyit/internal/store"
 	"iter"
+
+	"google.golang.org/protobuf/encoding/protowire"
 )
+
+// Keep leaf rewrites small even when records carry more than compact recipes.
+const indexLeafTarget = 128 << 10
+
+func indexItemBytes(v item) int {
+	n := 0
+	if v.Key != "" {
+		n += 1 + protowire.SizeBytes(len(v.Key))
+	}
+	if len(v.Value) != 0 {
+		n += 1 + protowire.SizeBytes(len(v.Value))
+	}
+	return 1 + protowire.SizeBytes(n)
+}
 
 // indexWriter batches durable writes without widening the reader's fetch unit.
 // References are assigned before upload; update must flush before publishing its root.
 type indexWriter struct {
-	cache     *cache
+	cache *cache
+	// admit may copy decoded immutable bytes into the existing bounded cache.
+	// It does not publish references and must not retain the reusable data buffer.
+	admit     func(context.Context, string, []byte)
 	packLimit int
-	ctx       context.Context
-	store     store.Store
-	prefix    string
-	number    int
+	// A soft target for prefetched index containers; single large pages may
+	// exceed it while remaining within packLimit/the format bound.
+	packTarget int
+	ctx        context.Context
+	store      store.Store
+	prefix     string
+	number     int
 	// step partitions directory pack numbers among workers sharing a prefix.
 	// Zero retains the normal consecutive numbering.
 	step int
@@ -36,6 +58,9 @@ func (w *indexWriter) flush() error {
 	}
 	if err := w.store.Put(w.ctx, w.key(), w.data, ""); err != nil {
 		return err
+	}
+	if w.admit != nil {
+		w.admit(w.ctx, w.key(), w.data)
 	}
 	if w.cache != nil {
 		data := w.data
@@ -75,7 +100,11 @@ func (w *indexWriter) saveBytes(b []byte) (pageRef, error) {
 	if len(b) > limit {
 		return pageRef{}, fmt.Errorf("index page exceeds pack size")
 	}
-	if len(w.data)+len(b) > limit {
+	target := limit
+	if w.packTarget > 0 {
+		target = min(target, w.packTarget)
+	}
+	if len(w.data)+len(b) > target {
 		if err := w.flush(); err != nil {
 			return pageRef{}, err
 		}
@@ -117,6 +146,7 @@ func (idx *index) merge(ctx context.Context, c *changes, w *indexWriter, id page
 	}
 	if len(p.Children) == 0 {
 		buf := make([]item, 0, fanout)
+		bytes := 0
 		flush := func() error {
 			if len(buf) == 0 {
 				return nil
@@ -126,10 +156,18 @@ func (idx *index) merge(ctx context.Context, c *changes, w *indexWriter, id page
 				return err
 			}
 			buf = make([]item, 0, fanout)
+			bytes = 0
 			return emit(e)
 		}
 		add := func(v item) error {
+			size := indexItemBytes(v)
+			if len(buf) != 0 && bytes+size > indexLeafTarget {
+				if err := flush(); err != nil {
+					return err
+				}
+			}
 			buf = append(buf, v)
+			bytes += size
 			if len(buf) == fanout {
 				return flush()
 			}
@@ -163,6 +201,14 @@ func (idx *index) merge(ctx context.Context, c *changes, w *indexWriter, id page
 		if len(buf) == 0 {
 			return nil
 		}
+		// A unary branch adds an object-store round trip without narrowing
+		// the key range. References do not encode tree height, so promote its
+		// immutable child directly; siblings may retain their old depths.
+		if len(buf) == 1 {
+			only := buf[0]
+			buf = make([]edge, 0, fanout)
+			return emit(only)
+		}
 		e, err := w.save(page{Children: buf})
 		if err != nil {
 			return err
@@ -195,7 +241,7 @@ func (idx *index) merge(ctx context.Context, c *changes, w *indexWriter, id page
 	return flush()
 }
 
-// buildRoot groups the stream of same-height subtrees into higher levels.
+// update merges a bounded stream of changed records into immutable subtrees.
 func (idx *index) update(ctx context.Context, bucket *bolt.Bucket) (root pageRef, err error) {
 	c := &changes{cursor: bucket.Cursor()}
 	c.key, c.value = c.cursor.First()
@@ -238,9 +284,10 @@ func (idx *index) updateChanges(ctx context.Context, c *changes) (root pageRef, 
 	if c.key == nil {
 		return idx.root, nil
 	}
-	w := &indexWriter{ctx: ctx, store: idx.store, prefix: rand.Text(), data: make([]byte, 0, indexPackSize)}
+	w := &indexWriter{ctx: ctx, store: idx.store, prefix: rand.Text(), data: make([]byte, 0, indexContainerTarget)}
 	if idx.containers {
 		w.cache = idx.cache
+		w.packTarget = indexContainerTarget
 	}
 	defer func() {
 		if err == nil {

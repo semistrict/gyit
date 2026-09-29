@@ -46,17 +46,17 @@ func (c Client) call(ctx context.Context, req *pb.Request) (snapshot *pb.Snapsho
 }
 
 func (c Client) Log(ctx context.Context, revision string, count int, firstParent bool, emit func(*pb.LogEntry) error) error {
-	if count < 0 || count > 1000 {
-		return fmt.Errorf("log count must be between 0 and 1000")
+	if count < 0 || count > repo.MaxLogCount {
+		return fmt.Errorf("log count must be between 0 and %d", repo.MaxLogCount)
 	}
 	return c.LogPaths(ctx, &pb.LogRequest{Revision: revision, MaxCount: uint32(count), FirstParent: firstParent}, emit)
 }
 
 func (c Client) LogPaths(ctx context.Context, log *pb.LogRequest, emit func(*pb.LogEntry) error) error {
-	if log.MaxCount > 1000 {
-		return fmt.Errorf("log count must be between 0 and 1000")
+	if log.MaxCount > repo.MaxLogCount {
+		return fmt.Errorf("log count must be between 0 and %d", repo.MaxLogCount)
 	}
-	if log.MaxCount == 0 {
+	if log.MaxCount == 0 && !log.Unlimited {
 		return nil
 	}
 	req := &pb.Request{Version: Version, Operation: &pb.Request_Log{Log: log}}
@@ -76,8 +76,11 @@ func (c Client) LogPaths(ctx context.Context, log *pb.LogRequest, emit func(*pb.
 }
 
 func (c Client) exchange(ctx context.Context, req *pb.Request, consume func(*pb.Response) (bool, error)) (err error) {
-	ctx, cancel := context.WithTimeout(ctx, operationTimeout(req)+5*time.Second)
-	defer cancel()
+	if timeout := operationTimeout(req); timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout+5*time.Second)
+		defer cancel()
+	}
 	defer func() {
 		if err != nil {
 			if ctx.Err() != nil {

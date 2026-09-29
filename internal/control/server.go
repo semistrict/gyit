@@ -17,7 +17,10 @@ const maxConnections = 16
 const historyTimeout = 5 * time.Minute
 
 func operationTimeout(req *pb.Request) time.Duration {
-	if req.GetLog() != nil || req.GetPathLog() != nil || req.GetHistoryLog() != nil || req.GetUpdate() != nil || req.GetDiff() != nil || req.GetBlame() != nil || req.GetView() != nil {
+	if req.GetLog() != nil || req.GetPathLog() != nil || req.GetHistoryLog() != nil {
+		return 0 // A paused pager or a coverage gap is not a stalled request.
+	}
+	if req.GetUpdate() != nil || req.GetDiff() != nil || req.GetBlame() != nil || req.GetView() != nil {
 		return historyTimeout
 	}
 	return requestTimeout
@@ -118,7 +121,15 @@ func serveConnection(ctx context.Context, conn net.Conn, handler StreamHandler) 
 		return
 	}
 	timeout := operationTimeout(req)
-	reqCtx, reqCancel := context.WithTimeout(ctx, timeout)
+	var reqCtx context.Context
+	var reqCancel context.CancelFunc
+	if timeout == 0 {
+		reqCtx, reqCancel = context.WithCancel(ctx)
+		_ = conn.SetDeadline(time.Time{})
+	} else {
+		reqCtx, reqCancel = context.WithTimeout(ctx, timeout)
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+	}
 	defer reqCancel()
 	peerDone := make(chan struct{})
 	go func() {
@@ -130,6 +141,5 @@ func serveConnection(ctx context.Context, conn net.Conn, handler StreamHandler) 
 	defer func() { _ = conn.Close(); <-peerDone }()
 	stopRequest := context.AfterFunc(reqCtx, func() { _ = conn.Close() })
 	defer stopRequest()
-	_ = conn.SetDeadline(time.Now().Add(timeout))
 	_ = handler(reqCtx, req, send)
 }

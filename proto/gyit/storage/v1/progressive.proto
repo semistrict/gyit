@@ -39,51 +39,6 @@ message ProgressiveState {
   string progress = 3;
 }
 
-// Ingested path history. No field depends on a query or its result count.
-message FileHistoryLink {
-  PageReference event = 1;
-  string commit = 2;
-  int64 time = 3;
-  // Minimum commit timestamp along the elided continuation, including event.
-  int64 gate = 4;
-}
-message FileHistoryState {
-  string oid = 1;
-  uint32 mode = 2;
-  FileHistoryLink normal = 3;
-  FileHistoryLink first_parent = 4;
-  PageReference directory = 5;
-  int64 directory_gate = 6;
-}
-message FileHistoryRoot {
-  FileHistoryState state = 1;
-  FileHistoryCommit commit = 2;
-  PageReference record = 3;
-}
-message FileHistoryCommit {
-  string sha = 1;
-  string tree = 2;
-  repeated string parents = 3;
-  CommitRecord metadata = 4;
-}
-message FileHistoryDirectory {
-  repeated FileHistoryEntry entries = 1;
-  repeated DirectoryChild children = 2;
-}
-message FileHistoryEntry {
-  bytes name = 1;
-  FileHistoryState state = 2;
-}
-message FileHistoryCursor {
-  string sha = 1;
-  int64 time = 2;
-  FileHistoryState state = 3;
-}
-message FileHistoryEvent {
-  PageReference commit = 1;
-  repeated FileHistoryCursor parents = 2;
-}
-
 // One evictable, uncompressed cache entry per immutable history container.
 message FileHistoryCachedContainer {
   repeated FileHistoryCachedFrame frames = 1;
@@ -93,4 +48,78 @@ message FileHistoryCachedFrame {
   int64 length = 2;
   string hash = 3;
   bytes data = 4;
+}
+
+// Streaming history v2. Each batch is independently readable: its records
+// depend on parent Git trees, never on previously indexed parent histories.
+// Global keys history/v2/commit/<sha> locate covered commits. A missing key is
+// missing coverage, not an unchanged path or end of ancestry.
+message HistoryBatchLocation {
+  PageReference batch = 1;
+  uint32 ordinal = 2;
+}
+
+message HistoryBatch {
+  // Version 3 adds directory-only postings keyed by path plus a trailing slash.
+  // Version 2 directory-only readers must recheck changed tree values.
+  uint32 version = 1;
+  repeated HistoryBatchCommit commits = 2;
+  PageReference paths = 3;
+  PageReference display = 4;
+  // 16,384-bit Bloom filter, four SHA-256-derived probes. False positives
+  // only cause a posting lookup; no false negative may elide a changed path.
+  bytes path_filter = 5;
+  // Optional immutable destinations for parents outside this frame. Links
+  // never replace parent identities or timestamps; omitted links use the index.
+  repeated HistoryBatchLink links = 6;
+}
+message HistoryBatchLink {
+  bytes commit_oid = 1;
+  HistoryBatchLocation location = 2;
+}
+message HistoryBatchCommit {
+  bytes oid = 1;
+  repeated bytes parents = 2;
+  repeated int64 parent_times = 3;
+  reserved 4;
+}
+// Sorted path dictionary for one batch. A posting's packed ordinals reference
+// the batch commit table. Each bitmap identifies the parents with a different
+// path value. For root commits bit zero compares with an empty tree.
+// Missing postings prove TREESAME against the first parent, only for commits
+// covered by this batch. Later-parent differences may be omitted when the first
+// parent is already TREESAME: default path history never consults them.
+message HistoryPathPage {
+  repeated HistoryPathPosting entries = 1;
+  repeated DirectoryChild children = 2;
+}
+message HistoryPathPosting {
+  bytes path = 1;
+  repeated uint32 ordinals = 2;
+  repeated bytes different_parents = 3;
+}
+
+// Durable progress for one selected tip. Frontier pages contain work that was
+// not covered at the same atomic publication. Complete proves the entire
+// reachable ancestry is covered, allowing incremental imports to stop here.
+message HistoryIngestion {
+  PageReference frontier = 1;
+  uint64 covered_commits = 2;
+  bool complete = 3;
+  string error = 4;
+  // Every reachable graph frame is already packed; incremental compaction
+  // stops at this tip without visiting its older ancestry.
+  bool graph_compacted = 5;
+  // The compacted closure uses direct immutable parent-frame links.
+  bool graph_links = 6;
+}
+message HistoryFrontierPage {
+  repeated bytes commits = 1;
+  PageReference next = 2;
+}
+
+// Message records are interpreted for emitted commits. Bounded read-ahead may
+// fetch their containers earlier for batches matching the requested path.
+message HistoryDisplay {
+  repeated CommitRecord commits = 1;
 }

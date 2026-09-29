@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package gyit.storage.v1;
+
+option go_package = "gyit/internal/gen/gyit/storage/v1;storagev1";
+
+import "gyit/storage/v1/storage.proto";
+
+message HistoryLayoutProbeCatalog {
+  uint32 count = 1;
+  repeated PageReference graph = 2;
+  repeated PageReference ids = 3;
+  PageReference paths = 4;
+}
+
+// Experimental physical-layout benchmark, not a published repository format.
+// Commit ordinals follow a date-priority walk. Parent arrays are concatenated
+// in commit order; counts delimit them. Deltas are relative to the child ordinal.
+// A parent delta of -2147483648 denotes an uncovered frontier, never a root.
+message HistoryLayoutProbeGraph {
+  uint32 first_ordinal = 1;
+  repeated uint32 parent_counts = 2;
+  repeated sint64 parent_deltas = 3;
+  int64 time_origin = 4;
+  repeated sint64 parent_time_deltas = 5;
+}
+
+// Separate from the graph so walking unchanged commits need not read SHA data.
+message HistoryLayoutProbeIDs {
+  bytes oids = 1;
+}

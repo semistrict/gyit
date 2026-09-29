@@ -46,40 +46,12 @@ func parseNativeTree(raw []byte) ([]Dirent, error) {
 	r := bufio.NewReader(bytes.NewReader(raw))
 	var out []Dirent
 	for {
-		mode, err := readTreeMode(r)
+		e, err := readNativeTreeEntry(r)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return nil, err
-		}
-		name, err := r.ReadSlice(0)
-		if err != nil {
-			return nil, err
-		}
-		name = name[:len(name)-1]
-		if len(name) == 0 || len(name) > 255 || bytes.Equal(name, []byte(".")) || bytes.Equal(name, []byte("..")) || bytes.ContainsRune(name, '/') {
-			return nil, fmt.Errorf("invalid native tree name")
-		}
-		canonical := mode & 0170000
-		switch canonical {
-		case 0100000:
-			canonical |= 0644
-			if mode&0100 != 0 {
-				canonical = 0100755
-			}
-		case 0040000, 0120000, 0160000:
-		default:
-			return nil, fmt.Errorf("invalid native tree mode")
-		}
-		copiedName := string(name)
-		var oid [20]byte
-		if _, err := io.ReadFull(r, oid[:]); err != nil {
-			return nil, err
-		}
-		e := Dirent{Name: copiedName, OID: hex.EncodeToString(oid[:]), Mode: canonical}
-		if mode != canonical {
-			e.RawMode = mode
 		}
 		out = append(out, e)
 	}
@@ -90,6 +62,44 @@ func parseNativeTree(raw []byte) ([]Dirent, error) {
 		}
 	}
 	return out, nil
+}
+
+// readNativeTreeEntry is shared by small directory reads and streaming history
+// comparison. It does not allocate a directory-sized slice.
+func readNativeTreeEntry(r *bufio.Reader) (Dirent, error) {
+	mode, err := readTreeMode(r)
+	if err != nil {
+		return Dirent{}, err
+	}
+	name, err := r.ReadSlice(0)
+	if err != nil {
+		return Dirent{}, err
+	}
+	name = name[:len(name)-1]
+	if len(name) == 0 || len(name) > 255 || bytes.Equal(name, []byte(".")) || bytes.Equal(name, []byte("..")) || bytes.ContainsRune(name, '/') {
+		return Dirent{}, fmt.Errorf("invalid native tree name")
+	}
+	copiedName := string(name)
+	canonical := mode & 0170000
+	switch canonical {
+	case 0100000:
+		canonical |= 0644
+		if mode&0100 != 0 {
+			canonical = 0100755
+		}
+	case 0040000, 0120000, 0160000:
+	default:
+		return Dirent{}, fmt.Errorf("invalid native tree mode")
+	}
+	var oid [20]byte
+	if _, err := io.ReadFull(r, oid[:]); err != nil {
+		return Dirent{}, err
+	}
+	e := Dirent{Name: copiedName, OID: hex.EncodeToString(oid[:]), Mode: canonical}
+	if mode != canonical {
+		e.RawMode = mode
+	}
+	return e, nil
 }
 
 func readTreeMode(r *bufio.Reader) (uint32, error) {

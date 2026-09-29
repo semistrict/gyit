@@ -36,7 +36,7 @@ func (r *Repository) View(ctx context.Context, current *Snapshot, opt ViewOption
 		return err
 	}
 	p.cache = r.cache
-	p.Demand, p.DemandCommits, p.ResolveRevision = r.progressive.Demand, r.progressive.DemandCommits, r.progressive.ResolveRevision
+	p.Demand, p.DemandCommits = r.progressive.Demand, r.progressive.DemandCommits
 	r = p.HistoryRepository()
 	switch opt.Command {
 	case "ls-tree", "ls-files", "cat-file", "grep":

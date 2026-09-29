@@ -549,8 +549,6 @@ type viewBlobReader struct {
 	s         *Snapshot
 	oid       string
 	off, size int64
-	data      []byte
-	part      int64
 }
 
 func (r *viewBlobReader) Read(p []byte) (int, error) {

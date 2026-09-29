@@ -207,7 +207,7 @@ func TestProgressiveIncrementalAndCAS(t *testing.T) {
 	// A failed CAS must not install a new local root.
 	oldRoot := p.index().root
 	backend.conflict = true
-	if err = p.SetState(t.Context(), newID, nil); !errors.Is(err, store.ErrConflict) {
+	if err = p.SetHistoryError(t.Context(), newID, "failed publication test"); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("CAS result: %v", err)
 	}
 	if p.index().root != oldRoot {

@@ -16,7 +16,26 @@ import (
 
 // PrepareSnapshot builds only previously unprepared or changed subtrees. All
 // referenced blobs must have been acquired first. Publication is a single CAS.
-func (p *Progressive) PrepareSnapshot(ctx context.Context, sha string) error {
+// Optional acquisition packs must already be published. They avoid downloading
+// the same trees immediately after upload; readers never depend on these files.
+func (p *Progressive) PrepareSnapshot(ctx context.Context, sha string, gitdirs ...string) error {
+	if len(gitdirs) > 0 {
+		source, err := openHistorySource(gitdirs)
+		if err != nil {
+			return err
+		}
+		defer source.close()
+		for _, pack := range source.packs {
+			var published pb.ProgressiveObject
+			if err := p.get(ctx, "pack/"+pack.id, &published); err != nil {
+				return fmt.Errorf("snapshot acquisition pack is not published: %w", err)
+			}
+			if published.Pack != pack.id || published.PackSize != int64(len(pack.data)) {
+				return fmt.Errorf("snapshot acquisition pack identity mismatch")
+			}
+		}
+		ctx = context.WithValue(ctx, historySourceKey{}, source)
+	}
 	s, err := p.Open(ctx, sha)
 	if err != nil {
 		return err
@@ -28,8 +47,6 @@ func (p *Progressive) PrepareSnapshot(ctx context.Context, sha string) error {
 	if err = p.Ensure(ctx, missing); err != nil {
 		return err
 	}
-	p.writer.Lock()
-	defer p.writer.Unlock()
 	return p.buildDirectories(ctx, s.Tree)
 }
 
@@ -205,6 +222,10 @@ func (p *Progressive) buildDirectories(ctx context.Context, tree string) error {
 		if err := w.flush(); err != nil {
 			return err
 		}
+		// Building immutable tree pages cannot hold the publication lock: a slow
+		// snapshot upload must not stop independent history batches from appearing.
+		p.writer.Lock()
+		defer p.writer.Unlock()
 		return p.publish(ctx, changes)
 	})
 }

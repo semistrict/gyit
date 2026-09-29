@@ -10,6 +10,7 @@ import (
 	pb "gyit/internal/gen/gyit/storage/v1"
 	"gyit/internal/store"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -18,22 +19,29 @@ import (
 // to the single writer; mounted readers only access Store and decoded cache.
 // Missing requests are delegated without holding any reader/index mutex.
 type Progressive struct {
-	store           store.Store
-	cache           *cache
-	temp            string
-	writer          sync.Mutex
-	mu              sync.RWMutex
-	root            pageRef
-	token           string
-	Demand          func(context.Context, []string) error
-	DemandCommits   func(context.Context, []string, int) error
-	ResolveRevision func(context.Context, string) (string, error)
-	slots           chan struct{}
-	historyBuild    chan struct{}
+	store         store.Store
+	cache         *cache
+	temp          string
+	writer        sync.Mutex
+	mu            sync.RWMutex
+	root          pageRef
+	token         string
+	Demand        func(context.Context, []string) error
+	DemandCommits func(context.Context, []string, int) error
+	// DemandHistory acquires a shared commit/tree window at a coverage gap.
+	// Passive object-store readers leave it nil and wait for publication.
+	DemandHistory  func(context.Context, string) error
+	slots          chan struct{}
+	readSlots      chan struct{}
+	historyBuild   chan struct{}
+	historyChanged chan struct{}
+	// Optional native acquisition view. Configure before exposing readers.
+	// Its immutable packs are admitted only after their Store publication.
+	historyReadView func(context.Context) (context.Context, func(), error)
 }
 
 func newProgressive(ctx context.Context, backend store.Store, disk decodedCache, temp string) (*Progressive, error) {
-	p := &Progressive{store: backend, cache: newCache(0), temp: temp, slots: make(chan struct{}, 2), historyBuild: make(chan struct{}, 1)}
+	p := &Progressive{store: backend, cache: newCache(0), temp: temp, slots: make(chan struct{}, min(4, max(2, runtime.GOMAXPROCS(0)))), readSlots: make(chan struct{}, 2), historyBuild: make(chan struct{}, 1), historyChanged: make(chan struct{})}
 	p.cache.disk = disk
 	b, token, err := backend.Get(ctx, "HEAD", 0, -1)
 	if errors.Is(err, store.ErrNotFound) {
@@ -71,7 +79,10 @@ func (p *Progressive) get(ctx context.Context, key string, m proto.Message) erro
 			return nil
 		}
 	}
-	return p.index().get(ctx, key, m)
+	idx := p.index()
+	// Point reads must not pull unrelated recipes from their container.
+	idx.pageRanges = true
+	return idx.get(ctx, key, m)
 }
 func (p *Progressive) ObjectSize(ctx context.Context, oid string) (int64, error) {
 	if source, ok := ctx.Value(historySourceKey{}).(*historySource); ok {
@@ -128,9 +139,43 @@ func (p *Progressive) Open(ctx context.Context, sha string) (*Snapshot, error) {
 	return &Snapshot{SHA: sha, Tree: tree, progressive: p, idx: p.historyIndex()}, nil
 }
 func (p *Progressive) State(ctx context.Context, sha string) (*pb.ProgressiveState, error) {
-	s := &pb.ProgressiveState{}
-	e := p.get(ctx, "state/"+sha, s)
-	return s, e
+	state := &pb.ProgressiveState{}
+	snapshot, err := p.Open(ctx, sha)
+	if err != nil {
+		return state, err
+	}
+	// Both flags describe one immutable publication. The prepared root proves
+	// its entire directory subtree is durable; coverage already publishes its
+	// completion marker atomically with the last history records. Duplicating
+	// those facts in a separate state CAS adds latency and can disagree with data.
+	idx := p.index()
+	var root pageRef
+	if err := idx.get(ctx, "tree/"+snapshot.Tree, &root); err == nil {
+		if root == (pageRef{}) {
+			return state, fmt.Errorf("invalid prepared snapshot reference")
+		}
+		state.SnapshotComplete = true
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return state, err
+	}
+	var history pb.HistoryIngestion
+	if err := idx.get(ctx, historyIngestionKey+sha, &history); err != nil && !errors.Is(err, store.ErrNotFound) {
+		return state, err
+	}
+	state.HistoryComplete = history.Complete
+	switch {
+	case history.Error != "":
+		state.Progress = "History ingestion paused: " + history.Error
+	case state.SnapshotComplete && state.HistoryComplete:
+		state.Progress = "Current snapshot and full commit/tree history ready. Historical file contents remain available on demand."
+	case state.SnapshotComplete:
+		state.Progress = "Current snapshot ready; history continues independently."
+	case state.HistoryComplete:
+		state.Progress = "Full commit/tree history ready; snapshot preparation continues independently."
+	default:
+		state.Progress = "Snapshot and history preparation continues."
+	}
+	return state, nil
 }
 func validProgressiveOID(oid string) bool {
 	b, e := hex.DecodeString(oid)

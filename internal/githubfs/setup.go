@@ -1,17 +1,14 @@
 package githubfs
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
-
-	"gyit/internal/store"
 )
 
 func (f *FS) git(ctx context.Context, dir string, args ...string) *exec.Cmd {
@@ -42,60 +39,30 @@ func fullSHA(s string) bool {
 	}
 	return true
 }
-func (f *FS) resolve(ctx context.Context, remote string, t Target) (string, error) {
+
+// Refresh references only when mounting/updating, never to disambiguate a log path.
+func (f *FS) resolve(ctx context.Context, p *progressiveRepository, t Target) (string, error) {
 	if fullSHA(t.Revision) {
 		return strings.ToLower(t.Revision), nil
 	}
-	refs := []string{"HEAD"}
-	if t.Revision != "" {
-		refs = []string{"refs/heads/" + t.Revision, "refs/tags/" + t.Revision + "^{}", "refs/tags/" + t.Revision}
-	}
-	args := append([]string{"ls-remote", "--exit-code", remote}, refs...)
-	out, err := f.git(ctx, f.opts.DataDir, args...).Output()
+	file, err := os.CreateTemp(f.opts.DataDir, "advertised-refs-*")
 	if err != nil {
-		var failure *exec.ExitError
-		if errors.As(err, &failure) {
-			if failure.ExitCode() == 2 {
-				return "", fmt.Errorf("revision %q: %w", t.Revision, store.ErrNotFound)
-			}
-			return "", fmt.Errorf("resolve revision: %w: %s", err, f.redact(strings.TrimSpace(string(failure.Stderr))))
-		}
-		return "", fmt.Errorf("resolve revision: %w", err)
+		return "", err
 	}
-	found := map[string]string{}
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 && fullSHA(fields[0]) {
-			found[fields[1]] = fields[0]
-		}
+	defer os.Remove(file.Name())
+	defer file.Close()
+	cmd := f.git(ctx, f.opts.DataDir, "ls-remote", "--symref", p.remote, "HEAD", "refs/heads/*", "refs/tags/*")
+	var stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = file, &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("resolve revision: %w: %s", err, f.redact(strings.TrimSpace(stderr.String())))
 	}
-	for _, ref := range refs {
-		if sha := found[ref]; sha != "" {
-			return sha, nil
-		}
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("revision not found")
+	return p.reader.ImportAdvertisedReferences(ctx, file, t.Revision)
 }
 
-type progressWriter struct {
-	mu     sync.Mutex
-	update func(string)
-	last   time.Time
-}
-
-func (w *progressWriter) Write(b []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if time.Since(w.last) > 250*time.Millisecond {
-		line := strings.TrimSpace(strings.ReplaceAll(string(b), "\r", "\n"))
-		if len(line) > 1500 {
-			line = line[len(line)-1500:]
-		}
-		w.update("Fetching complete repository history through Git…\n" + line)
-		w.last = time.Now()
-	}
-	return len(b), nil
-}
 func (f *FS) redact(s string) string {
 	if token := f.opts.Token; token != "" {
 		s = strings.ReplaceAll(s, token, "[redacted]")

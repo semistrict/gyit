@@ -268,12 +268,15 @@ func (m *Matcher) LiteralPaths() []string {
 	}
 	var out []string
 	for _, p := range m.Patterns {
-		if p.wildcard || p.ICase || p.Exclude || p.directory || len(p.Attrs) > 0 {
+		if p.wildcard || p.ICase || p.Exclude || len(p.Attrs) > 0 {
 			return nil
 		}
 		name := p.Text
 		if name == "" {
 			name = "."
+		}
+		if p.directory {
+			name += "/"
 		}
 		out = append(out, name)
 	}

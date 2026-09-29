@@ -1,0 +1,13 @@
+syntax = "proto3";
+package gyit.storage.v1;
+import "gyit/storage/v1/progressive.proto";
+
+option go_package = "gyit/internal/gen/gyit/storage/v1;storagev1";
+
+// Ephemeral query scratch data, never a durable repository object. The ordered
+// key carries the signed commit timestamp and monotonically increasing tie ID.
+message LogTraversalCandidate {
+  bytes commit_oid = 1;
+  bytes path = 2;
+  HistoryBatchLocation history_location = 3;
+}

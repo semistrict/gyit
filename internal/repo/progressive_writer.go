@@ -12,6 +12,7 @@ import (
 	pb "gyit/internal/gen/gyit/storage/v1"
 	"gyit/internal/store"
 	"os"
+	"runtime/trace"
 )
 
 func (p *Progressive) stage(fn func(*bolt.Bucket) error) error {
@@ -48,13 +49,23 @@ func (p *Progressive) publish(ctx context.Context, b *bolt.Bucket) error {
 	return p.publishUploads(ctx, b, nil)
 }
 func (p *Progressive) publishUploads(ctx context.Context, b *bolt.Bucket, uploads *publicationUploads) error {
+	return p.publishIndex(ctx, uploads, func(idx *index) (pageRef, error) { return idx.update(ctx, b) })
+}
+
+// The caller holds writer. Build against the latest root, then atomically
+// publish it only after all immutable data and metadata uploads have finished.
+func (p *Progressive) publishIndex(ctx context.Context, uploads *publicationUploads, update func(*index) (pageRef, error)) error {
 	backend := p.store
 	if uploads != nil {
 		backend = uploads
 	}
-	idx := p.index()
-	idx.store = backend
-	root, err := idx.update(ctx, b)
+	p.mu.RLock()
+	rootBefore, expected := p.root, p.token
+	p.mu.RUnlock()
+	idx := &index{store: backend, cache: p.cache, root: rootBefore, containers: true}
+	var root pageRef
+	var err error
+	trace.WithRegion(ctx, "publication-build-index", func() { root, err = update(idx) })
 	if err != nil {
 		return err
 	}
@@ -67,13 +78,16 @@ func (p *Progressive) publishUploads(ctx context.Context, b *bolt.Bucket, upload
 		return err
 	}
 	if uploads != nil {
-		if err = uploads.wait(); err != nil {
+		trace.WithRegion(ctx, "publication-upload-wait", func() { err = uploads.wait() })
+		if err != nil {
 			return err
 		}
 	}
 	var token string
+	region := trace.StartRegion(ctx, "publication-CAS")
+	defer region.End()
 	if writer, ok := p.store.(store.VersionedWriter); ok {
-		token, err = writer.PutVersion(ctx, "HEAD", raw, p.token)
+		token, err = writer.PutVersion(ctx, "HEAD", raw, expected)
 		if err != nil {
 			return err
 		}
@@ -81,7 +95,7 @@ func (p *Progressive) publishUploads(ctx context.Context, b *bolt.Bucket, upload
 			return fmt.Errorf("invalid publication version")
 		}
 	} else {
-		if err = p.store.Put(ctx, "HEAD", raw, p.token); err != nil {
+		if err = p.store.Put(ctx, "HEAD", raw, expected); err != nil {
 			return err
 		}
 		var head []byte
@@ -95,16 +109,8 @@ func (p *Progressive) publishUploads(ctx context.Context, b *bolt.Bucket, upload
 	}
 	p.mu.Lock()
 	p.root, p.token = root, token
+	close(p.historyChanged)
+	p.historyChanged = make(chan struct{})
 	p.mu.Unlock()
 	return nil
-}
-func (p *Progressive) SetState(ctx context.Context, sha string, state *pb.ProgressiveState) error {
-	p.writer.Lock()
-	defer p.writer.Unlock()
-	return p.stage(func(b *bolt.Bucket) error {
-		if err := progressivePut(b, "state/"+sha, state); err != nil {
-			return err
-		}
-		return p.publish(ctx, b)
-	})
 }

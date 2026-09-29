@@ -103,6 +103,14 @@ type directoryFrame struct {
 
 func decodeDirectoryContainer(ctx context.Context, packed []byte) (map[int64]directoryFrame, error) {
 	pages := make(map[int64]directoryFrame)
+	if len(packed) == 0 {
+		return pages, nil
+	}
+	decoder, err := newFrameDecoder()
+	if err != nil {
+		return nil, err
+	}
+	defer decoder.Close()
 	var offset int64
 	total := 0
 	for len(packed) > 0 {
@@ -113,7 +121,7 @@ func decodeDirectoryContainer(ctx context.Context, packed []byte) (map[int64]dir
 		if err != nil {
 			return nil, err
 		}
-		raw, err := decodeFrame(packed[:n], 64<<10)
+		raw, err := decodeFrameWith(decoder, packed[:n], 64<<10)
 		if err != nil {
 			return nil, err
 		}

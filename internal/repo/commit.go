@@ -3,11 +3,8 @@ package repo
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha1"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"hash"
 	"io"
 	"strconv"
 	"strings"
@@ -144,36 +141,4 @@ func parseBufferedCommitParents(r *bufio.Reader, parentIDs *[]string, oidBytes i
 		return "", info, fmt.Errorf("commit missing tree")
 	}
 	return tree, info, nil
-}
-
-func readCommitMetadata(r *bufio.Reader, oid, format string) (commitInfo, error) {
-	line, err := r.ReadString('\n')
-	if err != nil {
-		return commitInfo{}, err
-	}
-	fields := strings.Fields(line)
-	if len(fields) != 3 || fields[0] != oid || fields[1] != "commit" {
-		return commitInfo{}, fmt.Errorf("invalid commit metadata response")
-	}
-	size, err := strconv.ParseInt(fields[2], 10, 64)
-	if err != nil || size < 0 {
-		return commitInfo{}, fmt.Errorf("invalid commit size")
-	}
-	var h hash.Hash = sha1.New()
-	if format == "sha256" {
-		h = sha256.New()
-	}
-	fmt.Fprintf(h, "commit %d\x00", size)
-	limited := &io.LimitedReader{R: r, N: size}
-	_, info, err := parseCommit(io.TeeReader(limited, h))
-	if err != nil {
-		return info, err
-	}
-	if limited.N != 0 || hex.EncodeToString(h.Sum(nil)) != oid {
-		return info, fmt.Errorf("commit checksum mismatch")
-	}
-	if b, err := r.ReadByte(); err != nil || b != '\n' {
-		return info, fmt.Errorf("invalid commit separator")
-	}
-	return info, nil
 }

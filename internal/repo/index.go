@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"gyit/internal/store"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 const fanout = 128
 const indexPackSize = 8 << 20
+const indexContainerTarget = 2 << 20
 
 type pageRef struct {
 	Pack           string
@@ -33,7 +35,10 @@ type page struct {
 
 type index struct {
 	// Progressive object indexes store uncompressed pages in bounded containers.
-	containers  bool
+	containers bool
+	// Random object recipes benefit from narrow reads; scans still load whole
+	// containers. Both paths share verified page and container cache entries.
+	pageRanges  bool
 	progressive *Progressive
 	store       store.Store
 	cache       *cache
@@ -58,24 +63,52 @@ func (idx *index) borrowPage(ctx context.Context, ref pageRef) ([]byte, func(), 
 		return nil, func() {}, fmt.Errorf("invalid index page hash")
 	}
 	if idx.containers {
-		raw, release, err := idx.cache.borrow(ctx, "index-container/"+ref.Pack, func() ([]byte, error) {
-			b, _, err := idx.store.Get(ctx, ref.Pack, 0, -1)
-			if err == nil && len(b) > indexPackSize {
-				return nil, fmt.Errorf("index container exceeds size bound")
+		key := fmt.Sprintf("verified-index/%s/%x/%x/%s", ref.Pack, ref.Offset, ref.Length, ref.Hash)
+		if page, release, err := idx.cache.borrowCached(ctx, key); !errors.Is(err, store.ErrNotFound) {
+			return page, release, err
+		} else {
+			release()
+		}
+		var raw []byte
+		var release func()
+		if idx.pageRanges {
+			raw, release, err = idx.cache.borrowCached(ctx, "index-container/"+ref.Pack)
+			if errors.Is(err, store.ErrNotFound) {
+				release()
+				return idx.cache.borrow(ctx, key, func() ([]byte, error) {
+					b, _, err := idx.store.Get(ctx, ref.Pack, ref.Offset, ref.Length)
+					if err == nil && (int64(len(b)) != ref.Length || fmt.Sprintf("%x", sha256.Sum256(b)) != ref.Hash) {
+						err = fmt.Errorf("index checksum mismatch")
+					}
+					return b, err
+				})
 			}
-			return b, err
-		})
+		} else {
+			raw, release, err = idx.cache.borrow(ctx, "index-container/"+ref.Pack, func() ([]byte, error) {
+				b, _, err := idx.store.Get(ctx, ref.Pack, 0, -1)
+				if err == nil && len(b) > indexPackSize {
+					return nil, fmt.Errorf("index container exceeds size bound")
+				}
+				return b, err
+			})
+		}
+		defer release()
 		if err != nil {
-			return nil, release, err
+			return nil, func() {}, err
 		}
 		if ref.Offset+ref.Length > int64(len(raw)) {
-			return nil, release, fmt.Errorf("index container range")
+			return nil, func() {}, fmt.Errorf("index container range")
 		}
-		page := raw[ref.Offset : ref.Offset+ref.Length]
-		if fmt.Sprintf("%x", sha256.Sum256(page)) != ref.Hash {
-			return nil, release, fmt.Errorf("index checksum mismatch")
-		}
-		return page, release, nil
+		// The cache loader may outlive a canceled waiter. Own these bytes before
+		// handing them to it, so releasing the container cannot unmap its input.
+		// This also prevents a small in-memory page from pinning a large container.
+		page := append([]byte(nil), raw[ref.Offset:ref.Offset+ref.Length]...)
+		return idx.cache.borrow(ctx, key, func() ([]byte, error) {
+			if fmt.Sprintf("%x", sha256.Sum256(page)) != ref.Hash {
+				return nil, fmt.Errorf("index checksum mismatch")
+			}
+			return page, nil
+		})
 	}
 	return idx.cache.borrow(ctx, "index/"+ref.Hash, func() ([]byte, error) {
 		b, _, err := idx.store.Get(ctx, ref.Pack, ref.Offset, ref.Length)
@@ -96,6 +129,12 @@ func (idx *index) page(ctx context.Context, ref pageRef) (page, error) {
 }
 
 func (idx *index) get(ctx context.Context, key string, out any) error {
+	return idx.getPrefetch(ctx, key, out, nil)
+}
+
+// A caller may warm sibling pages while it follows the authoritative lookup.
+// The callback borrows a validated branch page and must not retain its bytes.
+func (idx *index) getPrefetch(ctx context.Context, key string, out any, hint func(pageRef, []byte)) error {
 	if idx.progressive != nil {
 		return idx.progressive.historyRecord(ctx, key, out)
 	}
@@ -108,6 +147,9 @@ func (idx *index) get(ctx context.Context, key string, out any) error {
 		}
 		var next pageRef
 		next, err = lookupIndexPage(b, key, out)
+		if err == nil && next != (pageRef{}) && hint != nil {
+			hint(id, b)
+		}
 		release()
 		if err != nil || next == (pageRef{}) {
 			return err

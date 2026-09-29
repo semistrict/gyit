@@ -14,6 +14,10 @@ import (
 
 // Page only terminal output. Embedders and shell pipelines keep the raw stream.
 func pageLog(ctx context.Context, stdout, stderr io.Writer, produce func(context.Context, io.Writer) error) error {
+	return pageOutput(ctx, stdout, stderr, produce, false)
+}
+
+func pageOutput(ctx context.Context, stdout, stderr io.Writer, produce func(context.Context, io.Writer) error, buffered bool) error {
 	if !terminalOutput(stdout) || os.Getenv("TERM") == "dumb" {
 		return produce(ctx, stdout)
 	}
@@ -33,13 +37,16 @@ func pageLog(ctx context.Context, stdout, stderr io.Writer, produce func(context
 			return produce(ctx, stdout)
 		}
 	}
-	return spoolLog(ctx, pager, stdout, stderr, produce)
+	if buffered {
+		return spoolOutput(ctx, pager, stdout, stderr, produce)
+	}
+	return runPager(ctx, pager, stdout, stderr, produce)
 }
 
-// Finish the bounded RPC before paging, so time spent reading cannot exhaust
+// Show retains its bounded buffered RPC, so time spent reading cannot exhaust
 // the network deadline or leave a server worker blocked on terminal input.
 // Use disk, not an output-sized memory buffer; never materialize repository data.
-func spoolLog(ctx context.Context, pager string, stdout, stderr io.Writer, produce func(context.Context, io.Writer) error) error {
+func spoolOutput(ctx context.Context, pager string, stdout, stderr io.Writer, produce func(context.Context, io.Writer) error) error {
 	file, err := os.CreateTemp("", "gyit-log-*")
 	if err != nil {
 		return err

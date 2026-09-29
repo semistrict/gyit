@@ -80,6 +80,41 @@ func TestProgressiveIndexContainerRead(t *testing.T) {
 	}
 }
 
+// A hot verified page must survive even when its enclosing container does not
+// fit in the cache. Otherwise each lookup downloads and hashes it again.
+func TestProgressiveIndexHotPageWithoutContainer(t *testing.T) {
+	backend, err := store.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	measured := &indexReadStore{Store: backend}
+	w := &indexWriter{ctx: t.Context(), store: backend, prefix: "hot-page"}
+	ref, err := w.saveBytes(bytes.Repeat([]byte("p"), 32<<10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.saveBytes(make([]byte, 256<<10)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.flush(); err != nil {
+		t.Fatal(err)
+	}
+	idx := &index{store: measured, cache: newCache(96 << 10), containers: true}
+	for range 3 {
+		data, release, err := idx.borrowPage(t.Context(), ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(data, bytes.Repeat([]byte("p"), 32<<10)) {
+			t.Fatal("wrong cached page")
+		}
+		release()
+	}
+	if got := measured.gets.Load(); got != 1 {
+		t.Fatalf("hot page required %d container GETs; want 1", got)
+	}
+}
+
 // Foreground history packs are already local during import. Reading a newly
 // published commit should use the same bounded decoded cache as any other read.
 func TestProgressiveSmallCommitPackWarmsDecodedCache(t *testing.T) {
@@ -196,5 +231,40 @@ func TestProgressivePublicationWaitsForImmutableUploads(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// A small hot working set must remain cacheable as the index grows. Fetching
+// multi-megabyte containers for these pages repeatedly defeats a bounded cache.
+func TestProgressiveIndexSmallWorkingSet(t *testing.T) {
+	backend, _ := store.NewLocal(t.TempDir())
+	measured := &indexReadStore{Store: backend}
+	w := &indexWriter{ctx: t.Context(), store: backend, prefix: "working-set", packTarget: indexContainerTarget}
+	var refs []pageRef
+	for i := 0; i < 160; i++ {
+		var entries []item
+		for j := 0; j < 128; j++ {
+			entries = append(entries, item{Key: fmt.Sprintf("%04d/%04d", i, j), Value: bytes.Repeat([]byte{byte(i)}, 512)})
+		}
+		edge, err := w.save(page{Items: entries})
+		if err != nil {
+			t.Fatal(err)
+		}
+		refs = append(refs, edge.ID)
+	}
+	if err := w.flush(); err != nil {
+		t.Fatal(err)
+	}
+	p := directoryReader(t, measured, t.TempDir(), 4<<20)
+	for n := 0; n < 4; n++ {
+		for _, i := range []int{0, 159} {
+			page, err := p.index().page(t.Context(), refs[i])
+			if err != nil || len(page.Items) != 128 || page.Items[0].Key != fmt.Sprintf("%04d/0000", i) {
+				t.Fatalf("page %d: %v", i, err)
+			}
+		}
+	}
+	if n := measured.gets.Load(); n > 2 {
+		t.Fatalf("two small hot pages required %d object reads; want at most two", n)
 	}
 }

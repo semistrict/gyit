@@ -276,7 +276,7 @@ func waitHistory(t *testing.T, f *FS, path string) {
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		state, err := j.progressive.State(t.Context(), snapshot.SHA)
-		if err == nil && state.HistoryComplete {
+		if err == nil && state.HistoryComplete && state.SnapshotComplete {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

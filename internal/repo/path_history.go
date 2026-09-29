@@ -127,6 +127,17 @@ func (s *Snapshot) MatchesPathspec(ctx context.Context, raw, prefix string) (boo
 	if err != nil {
 		return false, invalidRevision(err.Error())
 	}
+	if paths := m.LiteralPaths(); len(paths) == 1 {
+		name := paths[0]
+		if name == "." {
+			name = ""
+		}
+		e, err := s.logPathEntry(ctx, name)
+		if IsNotFound(err) {
+			return false, nil
+		}
+		return e.OID != "", err
+	}
 	return s.changedByPathspec(ctx, "", s.Tree, m, s)
 }
 func (s *Snapshot) simplifyLogMatcher(ctx context.Context, sha string, parents []string, m *pathspec.Matcher, attrs *Snapshot) (bool, []string, error) {

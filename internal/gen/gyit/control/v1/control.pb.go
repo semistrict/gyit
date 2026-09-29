@@ -777,7 +777,8 @@ func (x *MountEndpoint) GetControlFile() string {
 type LogRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Revision string                 `protobuf:"bytes,1,opt,name=revision,proto3" json:"revision,omitempty"`
-	// Zero selects the default of 20; maximum 1000.
+	// Zero selects the legacy default of 20 unless unlimited is true.
+	// Explicit CLI -n 0 is handled without starting a request.
 	MaxCount    uint32   `protobuf:"varint,2,opt,name=max_count,json=maxCount,proto3" json:"max_count,omitempty"`
 	FirstParent bool     `protobuf:"varint,3,opt,name=first_parent,json=firstParent,proto3" json:"first_parent,omitempty"`
 	Paths       [][]byte `protobuf:"bytes,4,rep,name=paths,proto3" json:"paths,omitempty"`
@@ -787,6 +788,8 @@ type LogRequest struct {
 	PathPrefix   []byte `protobuf:"bytes,7,opt,name=path_prefix,json=pathPrefix,proto3" json:"path_prefix,omitempty"`
 	// Normal log displays full commit IDs; avoid unused abbreviation lookups.
 	FullCommitIds bool `protobuf:"varint,8,opt,name=full_commit_ids,json=fullCommitIds,proto3" json:"full_commit_ids,omitempty"`
+	// Stream until true end of history or client cancellation.
+	Unlimited     bool `protobuf:"varint,9,opt,name=unlimited,proto3" json:"unlimited,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -873,6 +876,13 @@ func (x *LogRequest) GetPathPrefix() []byte {
 func (x *LogRequest) GetFullCommitIds() bool {
 	if x != nil {
 		return x.FullCommitIds
+	}
+	return false
+}
+
+func (x *LogRequest) GetUnlimited() bool {
+	if x != nil {
+		return x.Unlimited
 	}
 	return false
 }
@@ -1597,7 +1607,7 @@ const file_gyit_control_v1_control_proto_rawDesc = "" +
 	"\rMountEndpoint\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x16\n" +
 	"\x06socket\x18\x02 \x01(\tR\x06socket\x12!\n" +
-	"\fcontrol_file\x18\x03 \x01(\tR\vcontrolFile\"\x84\x02\n" +
+	"\fcontrol_file\x18\x03 \x01(\tR\vcontrolFile\"\xa2\x02\n" +
 	"\n" +
 	"LogRequest\x12\x1a\n" +
 	"\brevision\x18\x01 \x01(\tR\brevision\x12\x1b\n" +
@@ -1608,7 +1618,8 @@ const file_gyit_control_v1_control_proto_rawDesc = "" +
 	"\x06follow\x18\x06 \x01(\bR\x06follow\x12\x1f\n" +
 	"\vpath_prefix\x18\a \x01(\fR\n" +
 	"pathPrefix\x12&\n" +
-	"\x0ffull_commit_ids\x18\b \x01(\bR\rfullCommitIds\"\xe6\x02\n" +
+	"\x0ffull_commit_ids\x18\b \x01(\bR\rfullCommitIds\x12\x1c\n" +
+	"\tunlimited\x18\t \x01(\bR\tunlimited\"\xe6\x02\n" +
 	"\bLogEntry\x12\x10\n" +
 	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x1b\n" +
 	"\tshort_sha\x18\x02 \x01(\tR\bshortSha\x12\x18\n" +

@@ -400,504 +400,6 @@ func (x *ProgressiveState) GetProgress() string {
 	return ""
 }
 
-// Ingested path history. No field depends on a query or its result count.
-type FileHistoryLink struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Event  *PageReference         `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
-	Commit string                 `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
-	Time   int64                  `protobuf:"varint,3,opt,name=time,proto3" json:"time,omitempty"`
-	// Minimum commit timestamp along the elided continuation, including event.
-	Gate          int64 `protobuf:"varint,4,opt,name=gate,proto3" json:"gate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryLink) Reset() {
-	*x = FileHistoryLink{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryLink) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryLink) ProtoMessage() {}
-
-func (x *FileHistoryLink) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryLink.ProtoReflect.Descriptor instead.
-func (*FileHistoryLink) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *FileHistoryLink) GetEvent() *PageReference {
-	if x != nil {
-		return x.Event
-	}
-	return nil
-}
-
-func (x *FileHistoryLink) GetCommit() string {
-	if x != nil {
-		return x.Commit
-	}
-	return ""
-}
-
-func (x *FileHistoryLink) GetTime() int64 {
-	if x != nil {
-		return x.Time
-	}
-	return 0
-}
-
-func (x *FileHistoryLink) GetGate() int64 {
-	if x != nil {
-		return x.Gate
-	}
-	return 0
-}
-
-type FileHistoryState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Oid           string                 `protobuf:"bytes,1,opt,name=oid,proto3" json:"oid,omitempty"`
-	Mode          uint32                 `protobuf:"varint,2,opt,name=mode,proto3" json:"mode,omitempty"`
-	Normal        *FileHistoryLink       `protobuf:"bytes,3,opt,name=normal,proto3" json:"normal,omitempty"`
-	FirstParent   *FileHistoryLink       `protobuf:"bytes,4,opt,name=first_parent,json=firstParent,proto3" json:"first_parent,omitempty"`
-	Directory     *PageReference         `protobuf:"bytes,5,opt,name=directory,proto3" json:"directory,omitempty"`
-	DirectoryGate int64                  `protobuf:"varint,6,opt,name=directory_gate,json=directoryGate,proto3" json:"directory_gate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryState) Reset() {
-	*x = FileHistoryState{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryState) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryState) ProtoMessage() {}
-
-func (x *FileHistoryState) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryState.ProtoReflect.Descriptor instead.
-func (*FileHistoryState) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *FileHistoryState) GetOid() string {
-	if x != nil {
-		return x.Oid
-	}
-	return ""
-}
-
-func (x *FileHistoryState) GetMode() uint32 {
-	if x != nil {
-		return x.Mode
-	}
-	return 0
-}
-
-func (x *FileHistoryState) GetNormal() *FileHistoryLink {
-	if x != nil {
-		return x.Normal
-	}
-	return nil
-}
-
-func (x *FileHistoryState) GetFirstParent() *FileHistoryLink {
-	if x != nil {
-		return x.FirstParent
-	}
-	return nil
-}
-
-func (x *FileHistoryState) GetDirectory() *PageReference {
-	if x != nil {
-		return x.Directory
-	}
-	return nil
-}
-
-func (x *FileHistoryState) GetDirectoryGate() int64 {
-	if x != nil {
-		return x.DirectoryGate
-	}
-	return 0
-}
-
-type FileHistoryRoot struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         *FileHistoryState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
-	Commit        *FileHistoryCommit     `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
-	Record        *PageReference         `protobuf:"bytes,3,opt,name=record,proto3" json:"record,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryRoot) Reset() {
-	*x = FileHistoryRoot{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryRoot) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryRoot) ProtoMessage() {}
-
-func (x *FileHistoryRoot) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryRoot.ProtoReflect.Descriptor instead.
-func (*FileHistoryRoot) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *FileHistoryRoot) GetState() *FileHistoryState {
-	if x != nil {
-		return x.State
-	}
-	return nil
-}
-
-func (x *FileHistoryRoot) GetCommit() *FileHistoryCommit {
-	if x != nil {
-		return x.Commit
-	}
-	return nil
-}
-
-func (x *FileHistoryRoot) GetRecord() *PageReference {
-	if x != nil {
-		return x.Record
-	}
-	return nil
-}
-
-type FileHistoryCommit struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sha           string                 `protobuf:"bytes,1,opt,name=sha,proto3" json:"sha,omitempty"`
-	Tree          string                 `protobuf:"bytes,2,opt,name=tree,proto3" json:"tree,omitempty"`
-	Parents       []string               `protobuf:"bytes,3,rep,name=parents,proto3" json:"parents,omitempty"`
-	Metadata      *CommitRecord          `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryCommit) Reset() {
-	*x = FileHistoryCommit{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryCommit) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryCommit) ProtoMessage() {}
-
-func (x *FileHistoryCommit) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryCommit.ProtoReflect.Descriptor instead.
-func (*FileHistoryCommit) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *FileHistoryCommit) GetSha() string {
-	if x != nil {
-		return x.Sha
-	}
-	return ""
-}
-
-func (x *FileHistoryCommit) GetTree() string {
-	if x != nil {
-		return x.Tree
-	}
-	return ""
-}
-
-func (x *FileHistoryCommit) GetParents() []string {
-	if x != nil {
-		return x.Parents
-	}
-	return nil
-}
-
-func (x *FileHistoryCommit) GetMetadata() *CommitRecord {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-type FileHistoryDirectory struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entries       []*FileHistoryEntry    `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
-	Children      []*DirectoryChild      `protobuf:"bytes,2,rep,name=children,proto3" json:"children,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryDirectory) Reset() {
-	*x = FileHistoryDirectory{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryDirectory) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryDirectory) ProtoMessage() {}
-
-func (x *FileHistoryDirectory) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryDirectory.ProtoReflect.Descriptor instead.
-func (*FileHistoryDirectory) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *FileHistoryDirectory) GetEntries() []*FileHistoryEntry {
-	if x != nil {
-		return x.Entries
-	}
-	return nil
-}
-
-func (x *FileHistoryDirectory) GetChildren() []*DirectoryChild {
-	if x != nil {
-		return x.Children
-	}
-	return nil
-}
-
-type FileHistoryEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          []byte                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	State         *FileHistoryState      `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryEntry) Reset() {
-	*x = FileHistoryEntry{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryEntry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryEntry) ProtoMessage() {}
-
-func (x *FileHistoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryEntry.ProtoReflect.Descriptor instead.
-func (*FileHistoryEntry) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *FileHistoryEntry) GetName() []byte {
-	if x != nil {
-		return x.Name
-	}
-	return nil
-}
-
-func (x *FileHistoryEntry) GetState() *FileHistoryState {
-	if x != nil {
-		return x.State
-	}
-	return nil
-}
-
-type FileHistoryCursor struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sha           string                 `protobuf:"bytes,1,opt,name=sha,proto3" json:"sha,omitempty"`
-	Time          int64                  `protobuf:"varint,2,opt,name=time,proto3" json:"time,omitempty"`
-	State         *FileHistoryState      `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryCursor) Reset() {
-	*x = FileHistoryCursor{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryCursor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryCursor) ProtoMessage() {}
-
-func (x *FileHistoryCursor) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryCursor.ProtoReflect.Descriptor instead.
-func (*FileHistoryCursor) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *FileHistoryCursor) GetSha() string {
-	if x != nil {
-		return x.Sha
-	}
-	return ""
-}
-
-func (x *FileHistoryCursor) GetTime() int64 {
-	if x != nil {
-		return x.Time
-	}
-	return 0
-}
-
-func (x *FileHistoryCursor) GetState() *FileHistoryState {
-	if x != nil {
-		return x.State
-	}
-	return nil
-}
-
-type FileHistoryEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commit        *PageReference         `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
-	Parents       []*FileHistoryCursor   `protobuf:"bytes,2,rep,name=parents,proto3" json:"parents,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileHistoryEvent) Reset() {
-	*x = FileHistoryEvent{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileHistoryEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileHistoryEvent) ProtoMessage() {}
-
-func (x *FileHistoryEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileHistoryEvent.ProtoReflect.Descriptor instead.
-func (*FileHistoryEvent) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *FileHistoryEvent) GetCommit() *PageReference {
-	if x != nil {
-		return x.Commit
-	}
-	return nil
-}
-
-func (x *FileHistoryEvent) GetParents() []*FileHistoryCursor {
-	if x != nil {
-		return x.Parents
-	}
-	return nil
-}
-
 // One evictable, uncompressed cache entry per immutable history container.
 type FileHistoryCachedContainer struct {
 	state         protoimpl.MessageState    `protogen:"open.v1"`
@@ -908,7 +410,7 @@ type FileHistoryCachedContainer struct {
 
 func (x *FileHistoryCachedContainer) Reset() {
 	*x = FileHistoryCachedContainer{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[14]
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -920,7 +422,7 @@ func (x *FileHistoryCachedContainer) String() string {
 func (*FileHistoryCachedContainer) ProtoMessage() {}
 
 func (x *FileHistoryCachedContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[14]
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -933,7 +435,7 @@ func (x *FileHistoryCachedContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileHistoryCachedContainer.ProtoReflect.Descriptor instead.
 func (*FileHistoryCachedContainer) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{14}
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *FileHistoryCachedContainer) GetFrames() []*FileHistoryCachedFrame {
@@ -955,7 +457,7 @@ type FileHistoryCachedFrame struct {
 
 func (x *FileHistoryCachedFrame) Reset() {
 	*x = FileHistoryCachedFrame{}
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[15]
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -967,7 +469,7 @@ func (x *FileHistoryCachedFrame) String() string {
 func (*FileHistoryCachedFrame) ProtoMessage() {}
 
 func (x *FileHistoryCachedFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[15]
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -980,7 +482,7 @@ func (x *FileHistoryCachedFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileHistoryCachedFrame.ProtoReflect.Descriptor instead.
 func (*FileHistoryCachedFrame) Descriptor() ([]byte, []int) {
-	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{15}
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *FileHistoryCachedFrame) GetOffset() int64 {
@@ -1007,6 +509,570 @@ func (x *FileHistoryCachedFrame) GetHash() string {
 func (x *FileHistoryCachedFrame) GetData() []byte {
 	if x != nil {
 		return x.Data
+	}
+	return nil
+}
+
+// Streaming history v2. Each batch is independently readable: its records
+// depend on parent Git trees, never on previously indexed parent histories.
+// Global keys history/v2/commit/<sha> locate covered commits. A missing key is
+// missing coverage, not an unchanged path or end of ancestry.
+type HistoryBatchLocation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Batch         *PageReference         `protobuf:"bytes,1,opt,name=batch,proto3" json:"batch,omitempty"`
+	Ordinal       uint32                 `protobuf:"varint,2,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryBatchLocation) Reset() {
+	*x = HistoryBatchLocation{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryBatchLocation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryBatchLocation) ProtoMessage() {}
+
+func (x *HistoryBatchLocation) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryBatchLocation.ProtoReflect.Descriptor instead.
+func (*HistoryBatchLocation) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *HistoryBatchLocation) GetBatch() *PageReference {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *HistoryBatchLocation) GetOrdinal() uint32 {
+	if x != nil {
+		return x.Ordinal
+	}
+	return 0
+}
+
+type HistoryBatch struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Version 3 adds directory-only postings keyed by path plus a trailing slash.
+	// Version 2 directory-only readers must recheck changed tree values.
+	Version uint32                `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Commits []*HistoryBatchCommit `protobuf:"bytes,2,rep,name=commits,proto3" json:"commits,omitempty"`
+	Paths   *PageReference        `protobuf:"bytes,3,opt,name=paths,proto3" json:"paths,omitempty"`
+	Display *PageReference        `protobuf:"bytes,4,opt,name=display,proto3" json:"display,omitempty"`
+	// 16,384-bit Bloom filter, four SHA-256-derived probes. False positives
+	// only cause a posting lookup; no false negative may elide a changed path.
+	PathFilter []byte `protobuf:"bytes,5,opt,name=path_filter,json=pathFilter,proto3" json:"path_filter,omitempty"`
+	// Optional immutable destinations for parents outside this frame. Links
+	// never replace parent identities or timestamps; omitted links use the index.
+	Links         []*HistoryBatchLink `protobuf:"bytes,6,rep,name=links,proto3" json:"links,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryBatch) Reset() {
+	*x = HistoryBatch{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryBatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryBatch) ProtoMessage() {}
+
+func (x *HistoryBatch) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryBatch.ProtoReflect.Descriptor instead.
+func (*HistoryBatch) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *HistoryBatch) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *HistoryBatch) GetCommits() []*HistoryBatchCommit {
+	if x != nil {
+		return x.Commits
+	}
+	return nil
+}
+
+func (x *HistoryBatch) GetPaths() *PageReference {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
+func (x *HistoryBatch) GetDisplay() *PageReference {
+	if x != nil {
+		return x.Display
+	}
+	return nil
+}
+
+func (x *HistoryBatch) GetPathFilter() []byte {
+	if x != nil {
+		return x.PathFilter
+	}
+	return nil
+}
+
+func (x *HistoryBatch) GetLinks() []*HistoryBatchLink {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+type HistoryBatchLink struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CommitOid     []byte                 `protobuf:"bytes,1,opt,name=commit_oid,json=commitOid,proto3" json:"commit_oid,omitempty"`
+	Location      *HistoryBatchLocation  `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryBatchLink) Reset() {
+	*x = HistoryBatchLink{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryBatchLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryBatchLink) ProtoMessage() {}
+
+func (x *HistoryBatchLink) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryBatchLink.ProtoReflect.Descriptor instead.
+func (*HistoryBatchLink) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *HistoryBatchLink) GetCommitOid() []byte {
+	if x != nil {
+		return x.CommitOid
+	}
+	return nil
+}
+
+func (x *HistoryBatchLink) GetLocation() *HistoryBatchLocation {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+type HistoryBatchCommit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Oid           []byte                 `protobuf:"bytes,1,opt,name=oid,proto3" json:"oid,omitempty"`
+	Parents       [][]byte               `protobuf:"bytes,2,rep,name=parents,proto3" json:"parents,omitempty"`
+	ParentTimes   []int64                `protobuf:"varint,3,rep,packed,name=parent_times,json=parentTimes,proto3" json:"parent_times,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryBatchCommit) Reset() {
+	*x = HistoryBatchCommit{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryBatchCommit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryBatchCommit) ProtoMessage() {}
+
+func (x *HistoryBatchCommit) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryBatchCommit.ProtoReflect.Descriptor instead.
+func (*HistoryBatchCommit) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *HistoryBatchCommit) GetOid() []byte {
+	if x != nil {
+		return x.Oid
+	}
+	return nil
+}
+
+func (x *HistoryBatchCommit) GetParents() [][]byte {
+	if x != nil {
+		return x.Parents
+	}
+	return nil
+}
+
+func (x *HistoryBatchCommit) GetParentTimes() []int64 {
+	if x != nil {
+		return x.ParentTimes
+	}
+	return nil
+}
+
+// Sorted path dictionary for one batch. A posting's packed ordinals reference
+// the batch commit table. Each bitmap identifies the parents with a different
+// path value. For root commits bit zero compares with an empty tree.
+// Missing postings prove TREESAME against the first parent, only for commits
+// covered by this batch. Later-parent differences may be omitted when the first
+// parent is already TREESAME: default path history never consults them.
+type HistoryPathPage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*HistoryPathPosting  `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	Children      []*DirectoryChild      `protobuf:"bytes,2,rep,name=children,proto3" json:"children,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryPathPage) Reset() {
+	*x = HistoryPathPage{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryPathPage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryPathPage) ProtoMessage() {}
+
+func (x *HistoryPathPage) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryPathPage.ProtoReflect.Descriptor instead.
+func (*HistoryPathPage) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *HistoryPathPage) GetEntries() []*HistoryPathPosting {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *HistoryPathPage) GetChildren() []*DirectoryChild {
+	if x != nil {
+		return x.Children
+	}
+	return nil
+}
+
+type HistoryPathPosting struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Path             []byte                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Ordinals         []uint32               `protobuf:"varint,2,rep,packed,name=ordinals,proto3" json:"ordinals,omitempty"`
+	DifferentParents [][]byte               `protobuf:"bytes,3,rep,name=different_parents,json=differentParents,proto3" json:"different_parents,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *HistoryPathPosting) Reset() {
+	*x = HistoryPathPosting{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryPathPosting) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryPathPosting) ProtoMessage() {}
+
+func (x *HistoryPathPosting) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryPathPosting.ProtoReflect.Descriptor instead.
+func (*HistoryPathPosting) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *HistoryPathPosting) GetPath() []byte {
+	if x != nil {
+		return x.Path
+	}
+	return nil
+}
+
+func (x *HistoryPathPosting) GetOrdinals() []uint32 {
+	if x != nil {
+		return x.Ordinals
+	}
+	return nil
+}
+
+func (x *HistoryPathPosting) GetDifferentParents() [][]byte {
+	if x != nil {
+		return x.DifferentParents
+	}
+	return nil
+}
+
+// Durable progress for one selected tip. Frontier pages contain work that was
+// not covered at the same atomic publication. Complete proves the entire
+// reachable ancestry is covered, allowing incremental imports to stop here.
+type HistoryIngestion struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Frontier       *PageReference         `protobuf:"bytes,1,opt,name=frontier,proto3" json:"frontier,omitempty"`
+	CoveredCommits uint64                 `protobuf:"varint,2,opt,name=covered_commits,json=coveredCommits,proto3" json:"covered_commits,omitempty"`
+	Complete       bool                   `protobuf:"varint,3,opt,name=complete,proto3" json:"complete,omitempty"`
+	Error          string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	// Every reachable graph frame is already packed; incremental compaction
+	// stops at this tip without visiting its older ancestry.
+	GraphCompacted bool `protobuf:"varint,5,opt,name=graph_compacted,json=graphCompacted,proto3" json:"graph_compacted,omitempty"`
+	// The compacted closure uses direct immutable parent-frame links.
+	GraphLinks    bool `protobuf:"varint,6,opt,name=graph_links,json=graphLinks,proto3" json:"graph_links,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryIngestion) Reset() {
+	*x = HistoryIngestion{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryIngestion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryIngestion) ProtoMessage() {}
+
+func (x *HistoryIngestion) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryIngestion.ProtoReflect.Descriptor instead.
+func (*HistoryIngestion) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *HistoryIngestion) GetFrontier() *PageReference {
+	if x != nil {
+		return x.Frontier
+	}
+	return nil
+}
+
+func (x *HistoryIngestion) GetCoveredCommits() uint64 {
+	if x != nil {
+		return x.CoveredCommits
+	}
+	return 0
+}
+
+func (x *HistoryIngestion) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *HistoryIngestion) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *HistoryIngestion) GetGraphCompacted() bool {
+	if x != nil {
+		return x.GraphCompacted
+	}
+	return false
+}
+
+func (x *HistoryIngestion) GetGraphLinks() bool {
+	if x != nil {
+		return x.GraphLinks
+	}
+	return false
+}
+
+type HistoryFrontierPage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Commits       [][]byte               `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
+	Next          *PageReference         `protobuf:"bytes,2,opt,name=next,proto3" json:"next,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryFrontierPage) Reset() {
+	*x = HistoryFrontierPage{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryFrontierPage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryFrontierPage) ProtoMessage() {}
+
+func (x *HistoryFrontierPage) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryFrontierPage.ProtoReflect.Descriptor instead.
+func (*HistoryFrontierPage) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *HistoryFrontierPage) GetCommits() [][]byte {
+	if x != nil {
+		return x.Commits
+	}
+	return nil
+}
+
+func (x *HistoryFrontierPage) GetNext() *PageReference {
+	if x != nil {
+		return x.Next
+	}
+	return nil
+}
+
+// Message records are interpreted for emitted commits. Bounded read-ahead may
+// fetch their containers earlier for batches matching the requested path.
+type HistoryDisplay struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Commits       []*CommitRecord        `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistoryDisplay) Reset() {
+	*x = HistoryDisplay{}
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistoryDisplay) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistoryDisplay) ProtoMessage() {}
+
+func (x *HistoryDisplay) ProtoReflect() protoreflect.Message {
+	mi := &file_gyit_storage_v1_progressive_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistoryDisplay.ProtoReflect.Descriptor instead.
+func (*HistoryDisplay) Descriptor() ([]byte, []int) {
+	return file_gyit_storage_v1_progressive_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *HistoryDisplay) GetCommits() []*CommitRecord {
+	if x != nil {
+		return x.Commits
 	}
 	return nil
 }
@@ -1041,48 +1107,53 @@ const file_gyit_storage_v1_progressive_proto_rawDesc = "" +
 	"\x10ProgressiveState\x12+\n" +
 	"\x11snapshot_complete\x18\x01 \x01(\bR\x10snapshotComplete\x12)\n" +
 	"\x10history_complete\x18\x02 \x01(\bR\x0fhistoryComplete\x12\x1a\n" +
-	"\bprogress\x18\x03 \x01(\tR\bprogress\"\x87\x01\n" +
-	"\x0fFileHistoryLink\x124\n" +
-	"\x05event\x18\x01 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x05event\x12\x16\n" +
-	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x12\n" +
-	"\x04time\x18\x03 \x01(\x03R\x04time\x12\x12\n" +
-	"\x04gate\x18\x04 \x01(\x03R\x04gate\"\x9c\x02\n" +
-	"\x10FileHistoryState\x12\x10\n" +
-	"\x03oid\x18\x01 \x01(\tR\x03oid\x12\x12\n" +
-	"\x04mode\x18\x02 \x01(\rR\x04mode\x128\n" +
-	"\x06normal\x18\x03 \x01(\v2 .gyit.storage.v1.FileHistoryLinkR\x06normal\x12C\n" +
-	"\ffirst_parent\x18\x04 \x01(\v2 .gyit.storage.v1.FileHistoryLinkR\vfirstParent\x12<\n" +
-	"\tdirectory\x18\x05 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\tdirectory\x12%\n" +
-	"\x0edirectory_gate\x18\x06 \x01(\x03R\rdirectoryGate\"\xbe\x01\n" +
-	"\x0fFileHistoryRoot\x127\n" +
-	"\x05state\x18\x01 \x01(\v2!.gyit.storage.v1.FileHistoryStateR\x05state\x12:\n" +
-	"\x06commit\x18\x02 \x01(\v2\".gyit.storage.v1.FileHistoryCommitR\x06commit\x126\n" +
-	"\x06record\x18\x03 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x06record\"\x8e\x01\n" +
-	"\x11FileHistoryCommit\x12\x10\n" +
-	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x12\n" +
-	"\x04tree\x18\x02 \x01(\tR\x04tree\x12\x18\n" +
-	"\aparents\x18\x03 \x03(\tR\aparents\x129\n" +
-	"\bmetadata\x18\x04 \x01(\v2\x1d.gyit.storage.v1.CommitRecordR\bmetadata\"\x90\x01\n" +
-	"\x14FileHistoryDirectory\x12;\n" +
-	"\aentries\x18\x01 \x03(\v2!.gyit.storage.v1.FileHistoryEntryR\aentries\x12;\n" +
-	"\bchildren\x18\x02 \x03(\v2\x1f.gyit.storage.v1.DirectoryChildR\bchildren\"_\n" +
-	"\x10FileHistoryEntry\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\fR\x04name\x127\n" +
-	"\x05state\x18\x02 \x01(\v2!.gyit.storage.v1.FileHistoryStateR\x05state\"r\n" +
-	"\x11FileHistoryCursor\x12\x10\n" +
-	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x12\n" +
-	"\x04time\x18\x02 \x01(\x03R\x04time\x127\n" +
-	"\x05state\x18\x03 \x01(\v2!.gyit.storage.v1.FileHistoryStateR\x05state\"\x88\x01\n" +
-	"\x10FileHistoryEvent\x126\n" +
-	"\x06commit\x18\x01 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x06commit\x12<\n" +
-	"\aparents\x18\x02 \x03(\v2\".gyit.storage.v1.FileHistoryCursorR\aparents\"]\n" +
+	"\bprogress\x18\x03 \x01(\tR\bprogress\"]\n" +
 	"\x1aFileHistoryCachedContainer\x12?\n" +
 	"\x06frames\x18\x01 \x03(\v2'.gyit.storage.v1.FileHistoryCachedFrameR\x06frames\"p\n" +
 	"\x16FileHistoryCachedFrame\x12\x16\n" +
 	"\x06offset\x18\x01 \x01(\x03R\x06offset\x12\x16\n" +
 	"\x06length\x18\x02 \x01(\x03R\x06length\x12\x12\n" +
 	"\x04hash\x18\x03 \x01(\tR\x04hash\x12\x12\n" +
-	"\x04data\x18\x04 \x01(\fR\x04dataB-Z+gyit/internal/gen/gyit/storage/v1;storagev1b\x06proto3"
+	"\x04data\x18\x04 \x01(\fR\x04data\"f\n" +
+	"\x14HistoryBatchLocation\x124\n" +
+	"\x05batch\x18\x01 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x05batch\x12\x18\n" +
+	"\aordinal\x18\x02 \x01(\rR\aordinal\"\xb1\x02\n" +
+	"\fHistoryBatch\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\rR\aversion\x12=\n" +
+	"\acommits\x18\x02 \x03(\v2#.gyit.storage.v1.HistoryBatchCommitR\acommits\x124\n" +
+	"\x05paths\x18\x03 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x05paths\x128\n" +
+	"\adisplay\x18\x04 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\adisplay\x12\x1f\n" +
+	"\vpath_filter\x18\x05 \x01(\fR\n" +
+	"pathFilter\x127\n" +
+	"\x05links\x18\x06 \x03(\v2!.gyit.storage.v1.HistoryBatchLinkR\x05links\"t\n" +
+	"\x10HistoryBatchLink\x12\x1d\n" +
+	"\n" +
+	"commit_oid\x18\x01 \x01(\fR\tcommitOid\x12A\n" +
+	"\blocation\x18\x02 \x01(\v2%.gyit.storage.v1.HistoryBatchLocationR\blocation\"i\n" +
+	"\x12HistoryBatchCommit\x12\x10\n" +
+	"\x03oid\x18\x01 \x01(\fR\x03oid\x12\x18\n" +
+	"\aparents\x18\x02 \x03(\fR\aparents\x12!\n" +
+	"\fparent_times\x18\x03 \x03(\x03R\vparentTimesJ\x04\b\x04\x10\x05\"\x8d\x01\n" +
+	"\x0fHistoryPathPage\x12=\n" +
+	"\aentries\x18\x01 \x03(\v2#.gyit.storage.v1.HistoryPathPostingR\aentries\x12;\n" +
+	"\bchildren\x18\x02 \x03(\v2\x1f.gyit.storage.v1.DirectoryChildR\bchildren\"q\n" +
+	"\x12HistoryPathPosting\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\fR\x04path\x12\x1a\n" +
+	"\bordinals\x18\x02 \x03(\rR\bordinals\x12+\n" +
+	"\x11different_parents\x18\x03 \x03(\fR\x10differentParents\"\xf3\x01\n" +
+	"\x10HistoryIngestion\x12:\n" +
+	"\bfrontier\x18\x01 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\bfrontier\x12'\n" +
+	"\x0fcovered_commits\x18\x02 \x01(\x04R\x0ecoveredCommits\x12\x1a\n" +
+	"\bcomplete\x18\x03 \x01(\bR\bcomplete\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x12'\n" +
+	"\x0fgraph_compacted\x18\x05 \x01(\bR\x0egraphCompacted\x12\x1f\n" +
+	"\vgraph_links\x18\x06 \x01(\bR\n" +
+	"graphLinks\"c\n" +
+	"\x13HistoryFrontierPage\x12\x18\n" +
+	"\acommits\x18\x01 \x03(\fR\acommits\x122\n" +
+	"\x04next\x18\x02 \x01(\v2\x1e.gyit.storage.v1.PageReferenceR\x04next\"I\n" +
+	"\x0eHistoryDisplay\x127\n" +
+	"\acommits\x18\x01 \x03(\v2\x1d.gyit.storage.v1.CommitRecordR\acommitsB-Z+gyit/internal/gen/gyit/storage/v1;storagev1b\x06proto3"
 
 var (
 	file_gyit_storage_v1_progressive_proto_rawDescOnce sync.Once
@@ -1096,7 +1167,7 @@ func file_gyit_storage_v1_progressive_proto_rawDescGZIP() []byte {
 	return file_gyit_storage_v1_progressive_proto_rawDescData
 }
 
-var file_gyit_storage_v1_progressive_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_gyit_storage_v1_progressive_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_gyit_storage_v1_progressive_proto_goTypes = []any{
 	(*ProgressiveManifest)(nil),        // 0: gyit.storage.v1.ProgressiveManifest
 	(*ProgressiveObject)(nil),          // 1: gyit.storage.v1.ProgressiveObject
@@ -1104,46 +1175,44 @@ var file_gyit_storage_v1_progressive_proto_goTypes = []any{
 	(*ProgressiveEntry)(nil),           // 3: gyit.storage.v1.ProgressiveEntry
 	(*ProgressiveDirectory)(nil),       // 4: gyit.storage.v1.ProgressiveDirectory
 	(*ProgressiveState)(nil),           // 5: gyit.storage.v1.ProgressiveState
-	(*FileHistoryLink)(nil),            // 6: gyit.storage.v1.FileHistoryLink
-	(*FileHistoryState)(nil),           // 7: gyit.storage.v1.FileHistoryState
-	(*FileHistoryRoot)(nil),            // 8: gyit.storage.v1.FileHistoryRoot
-	(*FileHistoryCommit)(nil),          // 9: gyit.storage.v1.FileHistoryCommit
-	(*FileHistoryDirectory)(nil),       // 10: gyit.storage.v1.FileHistoryDirectory
-	(*FileHistoryEntry)(nil),           // 11: gyit.storage.v1.FileHistoryEntry
-	(*FileHistoryCursor)(nil),          // 12: gyit.storage.v1.FileHistoryCursor
-	(*FileHistoryEvent)(nil),           // 13: gyit.storage.v1.FileHistoryEvent
-	(*FileHistoryCachedContainer)(nil), // 14: gyit.storage.v1.FileHistoryCachedContainer
-	(*FileHistoryCachedFrame)(nil),     // 15: gyit.storage.v1.FileHistoryCachedFrame
-	(*PageReference)(nil),              // 16: gyit.storage.v1.PageReference
-	(*DirectoryChild)(nil),             // 17: gyit.storage.v1.DirectoryChild
-	(*CommitRecord)(nil),               // 18: gyit.storage.v1.CommitRecord
+	(*FileHistoryCachedContainer)(nil), // 6: gyit.storage.v1.FileHistoryCachedContainer
+	(*FileHistoryCachedFrame)(nil),     // 7: gyit.storage.v1.FileHistoryCachedFrame
+	(*HistoryBatchLocation)(nil),       // 8: gyit.storage.v1.HistoryBatchLocation
+	(*HistoryBatch)(nil),               // 9: gyit.storage.v1.HistoryBatch
+	(*HistoryBatchLink)(nil),           // 10: gyit.storage.v1.HistoryBatchLink
+	(*HistoryBatchCommit)(nil),         // 11: gyit.storage.v1.HistoryBatchCommit
+	(*HistoryPathPage)(nil),            // 12: gyit.storage.v1.HistoryPathPage
+	(*HistoryPathPosting)(nil),         // 13: gyit.storage.v1.HistoryPathPosting
+	(*HistoryIngestion)(nil),           // 14: gyit.storage.v1.HistoryIngestion
+	(*HistoryFrontierPage)(nil),        // 15: gyit.storage.v1.HistoryFrontierPage
+	(*HistoryDisplay)(nil),             // 16: gyit.storage.v1.HistoryDisplay
+	(*PageReference)(nil),              // 17: gyit.storage.v1.PageReference
+	(*DirectoryChild)(nil),             // 18: gyit.storage.v1.DirectoryChild
+	(*CommitRecord)(nil),               // 19: gyit.storage.v1.CommitRecord
 }
 var file_gyit_storage_v1_progressive_proto_depIdxs = []int32{
-	16, // 0: gyit.storage.v1.ProgressiveManifest.index:type_name -> gyit.storage.v1.PageReference
-	16, // 1: gyit.storage.v1.ProgressiveSnapshot.directory:type_name -> gyit.storage.v1.PageReference
-	16, // 2: gyit.storage.v1.ProgressiveEntry.directory:type_name -> gyit.storage.v1.PageReference
+	17, // 0: gyit.storage.v1.ProgressiveManifest.index:type_name -> gyit.storage.v1.PageReference
+	17, // 1: gyit.storage.v1.ProgressiveSnapshot.directory:type_name -> gyit.storage.v1.PageReference
+	17, // 2: gyit.storage.v1.ProgressiveEntry.directory:type_name -> gyit.storage.v1.PageReference
 	3,  // 3: gyit.storage.v1.ProgressiveDirectory.entries:type_name -> gyit.storage.v1.ProgressiveEntry
-	17, // 4: gyit.storage.v1.ProgressiveDirectory.children:type_name -> gyit.storage.v1.DirectoryChild
-	16, // 5: gyit.storage.v1.FileHistoryLink.event:type_name -> gyit.storage.v1.PageReference
-	6,  // 6: gyit.storage.v1.FileHistoryState.normal:type_name -> gyit.storage.v1.FileHistoryLink
-	6,  // 7: gyit.storage.v1.FileHistoryState.first_parent:type_name -> gyit.storage.v1.FileHistoryLink
-	16, // 8: gyit.storage.v1.FileHistoryState.directory:type_name -> gyit.storage.v1.PageReference
-	7,  // 9: gyit.storage.v1.FileHistoryRoot.state:type_name -> gyit.storage.v1.FileHistoryState
-	9,  // 10: gyit.storage.v1.FileHistoryRoot.commit:type_name -> gyit.storage.v1.FileHistoryCommit
-	16, // 11: gyit.storage.v1.FileHistoryRoot.record:type_name -> gyit.storage.v1.PageReference
-	18, // 12: gyit.storage.v1.FileHistoryCommit.metadata:type_name -> gyit.storage.v1.CommitRecord
-	11, // 13: gyit.storage.v1.FileHistoryDirectory.entries:type_name -> gyit.storage.v1.FileHistoryEntry
-	17, // 14: gyit.storage.v1.FileHistoryDirectory.children:type_name -> gyit.storage.v1.DirectoryChild
-	7,  // 15: gyit.storage.v1.FileHistoryEntry.state:type_name -> gyit.storage.v1.FileHistoryState
-	7,  // 16: gyit.storage.v1.FileHistoryCursor.state:type_name -> gyit.storage.v1.FileHistoryState
-	16, // 17: gyit.storage.v1.FileHistoryEvent.commit:type_name -> gyit.storage.v1.PageReference
-	12, // 18: gyit.storage.v1.FileHistoryEvent.parents:type_name -> gyit.storage.v1.FileHistoryCursor
-	15, // 19: gyit.storage.v1.FileHistoryCachedContainer.frames:type_name -> gyit.storage.v1.FileHistoryCachedFrame
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	18, // 4: gyit.storage.v1.ProgressiveDirectory.children:type_name -> gyit.storage.v1.DirectoryChild
+	7,  // 5: gyit.storage.v1.FileHistoryCachedContainer.frames:type_name -> gyit.storage.v1.FileHistoryCachedFrame
+	17, // 6: gyit.storage.v1.HistoryBatchLocation.batch:type_name -> gyit.storage.v1.PageReference
+	11, // 7: gyit.storage.v1.HistoryBatch.commits:type_name -> gyit.storage.v1.HistoryBatchCommit
+	17, // 8: gyit.storage.v1.HistoryBatch.paths:type_name -> gyit.storage.v1.PageReference
+	17, // 9: gyit.storage.v1.HistoryBatch.display:type_name -> gyit.storage.v1.PageReference
+	10, // 10: gyit.storage.v1.HistoryBatch.links:type_name -> gyit.storage.v1.HistoryBatchLink
+	8,  // 11: gyit.storage.v1.HistoryBatchLink.location:type_name -> gyit.storage.v1.HistoryBatchLocation
+	13, // 12: gyit.storage.v1.HistoryPathPage.entries:type_name -> gyit.storage.v1.HistoryPathPosting
+	18, // 13: gyit.storage.v1.HistoryPathPage.children:type_name -> gyit.storage.v1.DirectoryChild
+	17, // 14: gyit.storage.v1.HistoryIngestion.frontier:type_name -> gyit.storage.v1.PageReference
+	17, // 15: gyit.storage.v1.HistoryFrontierPage.next:type_name -> gyit.storage.v1.PageReference
+	19, // 16: gyit.storage.v1.HistoryDisplay.commits:type_name -> gyit.storage.v1.CommitRecord
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_gyit_storage_v1_progressive_proto_init() }
@@ -1158,7 +1227,7 @@ func file_gyit_storage_v1_progressive_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gyit_storage_v1_progressive_proto_rawDesc), len(file_gyit_storage_v1_progressive_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

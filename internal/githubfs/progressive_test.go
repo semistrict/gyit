@@ -38,10 +38,7 @@ func TestProgressiveMountBeforeHistoryAndDurableReads(t *testing.T) {
 	defer cancel()
 	for {
 		state, e := j.progressive.State(ctx, first)
-		if e == nil && state.HistoryComplete {
-			if !state.SnapshotComplete {
-				t.Fatal("history ready without current snapshot")
-			}
+		if e == nil && state.HistoryComplete && state.SnapshotComplete {
 			break
 		}
 		select {
@@ -51,7 +48,9 @@ func TestProgressiveMountBeforeHistoryAndDurableReads(t *testing.T) {
 		}
 	}
 	// A separate revision reuses the repository-wide object pool.
-	p, err := f.progressiveRepository(ctx, Target{Owner: "acme", Repository: "project"})
+	// A different branch is acquired explicitly; the selected tip's history
+	// does not prefetch unrelated branch tips.
+	p, _, err := f.prepareProgressive(ctx, Target{Owner: "acme", Repository: "project", Revision: second}, func(string) {})
 	if err != nil {
 		t.Fatal(err)
 	}

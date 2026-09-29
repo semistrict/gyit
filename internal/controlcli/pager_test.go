@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -85,13 +86,12 @@ func TestRedirectedLogNeverStartsPager(t *testing.T) {
 		t.Fatal(out.String(), err)
 	}
 }
-
-func TestPagerReadingDoesNotConsumeFetchDeadline(t *testing.T) {
+func TestBufferedPagerReadingDoesNotConsumeFetchDeadline(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	var out, stderr bytes.Buffer
 	// Slow reading must not backpressure a short-lived fetch. This is larger
 	// than a pipe buffer; a direct fetch-to-pager pipe would miss the deadline.
-	err := spoolLog(context.Background(), "sleep 0.3; cat; printf trailer", &out, &stderr, func(ctx context.Context, w io.Writer) error {
+	err := spoolOutput(context.Background(), "sleep 0.3; cat; printf trailer", &out, &stderr, func(ctx context.Context, w io.Writer) error {
 		fetch, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
 		for i := 0; i < 256; i++ {
@@ -113,11 +113,11 @@ func TestPagerReadingDoesNotConsumeFetchDeadline(t *testing.T) {
 	}
 }
 
-func TestPagerSpoolPreservesErrorsAndCleansUp(t *testing.T) {
+func TestBufferedPagerPreservesErrorsAndCleansUp(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	stop := errors.New("fetch failed")
 	var out, stderr bytes.Buffer
-	err := spoolLog(context.Background(), "exit 0", &out, &stderr, func(ctx context.Context, w io.Writer) error {
+	err := spoolOutput(context.Background(), "exit 0", &out, &stderr, func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, strings.Repeat("partial\n", 65536)); err != nil {
 			return err
 		}
@@ -134,5 +134,46 @@ func TestPagerSpoolPreservesErrorsAndCleansUp(t *testing.T) {
 	bounded := &limitedSpool{out: &data, left: 3}
 	if n, err := bounded.Write([]byte("four")); err == nil || n != 0 || data.Len() != 0 {
 		t.Fatal("spool exceeded its limit")
+	}
+}
+
+func TestStreamingPagerAppliesBackpressure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	release := filepath.Join(t.TempDir(), "release")
+	t.Setenv("GYIT_TEST_PAGER_RELEASE", release)
+	started := make(chan struct{})
+	produced := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- runPager(ctx, `while [ ! -e "$GYIT_TEST_PAGER_RELEASE" ]; do sleep 0.01; done; cat >/dev/null`, io.Discard, io.Discard, func(ctx context.Context, out io.Writer) error {
+			close(started)
+			for i := 0; i < 1024; i++ {
+				if _, err := io.WriteString(out, strings.Repeat("x", 4096)); err != nil {
+					return err
+				}
+			}
+			close(produced)
+			return nil
+		})
+	}()
+	<-started
+	select {
+	case <-produced:
+		t.Fatal("producer buffered the entire response ahead of the paused pager")
+	case err := <-done:
+		t.Fatalf("pager stopped early: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := os.WriteFile(release, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("pager did not resume")
 	}
 }

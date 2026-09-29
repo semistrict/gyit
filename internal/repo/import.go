@@ -128,25 +128,6 @@ func (p *Progressive) importReferences(ctx context.Context, source string) error
 				}
 			}
 		}
-		idx := &index{store: p.store, cache: p.cache, containers: true}
-		root, err := idx.update(ctx, changes)
-		if err != nil {
-			return err
-		}
-		// The refs index is separate from the repository object index.
-		cursor := changes.Cursor()
-		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
-			if err := cursor.Delete(); err != nil {
-				return err
-			}
-		}
-		data, err := marshal(root)
-		if err != nil {
-			return err
-		}
-		if err = changes.Put([]byte("refs-root"), data); err != nil {
-			return err
-		}
-		return p.publish(ctx, changes)
+		return p.publishReferences(ctx, changes)
 	})
 }

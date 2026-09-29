@@ -145,7 +145,7 @@ func (c *Controller) Serve(ctx context.Context, req *pb.Request, send func(*pb.R
 		count = repo.DefaultLogCount
 	}
 	if count > repo.MaxLogCount {
-		return send(failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "log count exceeds 1000"))
+		return send(failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("log count exceeds %d", repo.MaxLogCount)))
 	}
 	current := c.Current()
 	revision := log.GetRevision()
@@ -189,7 +189,7 @@ func (c *Controller) Serve(ctx context.Context, req *pb.Request, send func(*pb.R
 	}
 
 	if err == nil {
-		err = selected.LogWithOptions(ctx, repo.LogOptions{Count: count, FirstParent: log.GetFirstParent(), FullCommitIDs: log.FullCommitIds, Follow: log.Follow, Paths: paths, Prefix: string(log.PathPrefix), AttributeSource: current}, func(e repo.LogEntry) error {
+		err = selected.LogWithOptions(ctx, repo.LogOptions{Count: count, Unlimited: log.Unlimited, FirstParent: log.GetFirstParent(), FullCommitIDs: log.FullCommitIds, Follow: log.Follow, Paths: paths, Prefix: string(log.PathPrefix), AttributeSource: current}, func(e repo.LogEntry) error {
 			return send(&pb.Response{Version: Version, Result: &pb.Response_LogEntry{LogEntry: &pb.LogEntry{Sha: e.SHA, ShortSha: e.ShortSHA, Parents: e.Parents, ParentAbbrevLengths: logParentLengths(e.ShortParents), Author: e.Author, AuthorTime: e.AuthorTime, AuthorOffsetMinutes: e.AuthorOffset, Message: e.Message, MessageTruncated: e.MessageTruncated, AuthorTruncated: e.AuthorTruncated}}})
 		})
 	}

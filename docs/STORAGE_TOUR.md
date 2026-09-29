@@ -34,6 +34,14 @@ an explicit delay per request. This is not a network or filesystem benchmark.
 Import/publication, cloud adapters, bbolt and mmap remain native-only; index,
 protobuf, compression, pack and history reading are shared code.
 
+## Format transition
+
+The Wasm fixture and live command adapter use the current newest-first reader.
+The authored history diagrams and measurement slide still describe the previous
+format; consult [Progressive path history](HISTORY_STREAMING.md) for its replacement
+and current measurements. Those diagrams must be updated before this tour is
+presented as the new format's visual documentation.
+
 ## Rebuild inputs
 
 - Edit `docs/storage-tour.html` for the authored presentation.

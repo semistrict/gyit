@@ -15,6 +15,8 @@ import (
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // gcsStore uses the native Cloud Storage API and Application Default Credentials.
@@ -55,6 +57,13 @@ func gcsError(err error) error {
 	if errors.Is(err, storage.ErrObjectNotExist) {
 		return fmt.Errorf("%w: %v", ErrNotFound, err)
 	}
+	// The native gRPC transport reports status codes instead of HTTP codes.
+	switch status.Code(err) {
+	case codes.NotFound:
+		return fmt.Errorf("%w: %v", ErrNotFound, err)
+	case codes.FailedPrecondition:
+		return fmt.Errorf("%w: %v", ErrConflict, err)
+	}
 	var api *googleapi.Error
 	if errors.As(err, &api) {
 		switch api.Code {
@@ -86,6 +95,9 @@ func (s *gcsStore) Get(ctx context.Context, key string, off, length int64) ([]by
 		return nil, "", gcsError(err)
 	}
 	defer r.Close()
+	if r.Attrs.Decompressed {
+		return nil, "", fmt.Errorf("GCS transcoded stored bytes despite a compressed read request")
+	}
 	if r.Attrs.Generation <= 0 || r.Attrs.StartOffset != off {
 		return nil, "", fmt.Errorf("GCS returned invalid generation or range offset")
 	}

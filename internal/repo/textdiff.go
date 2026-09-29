@@ -205,9 +205,6 @@ func (r *editRange) down(lines []string, bits []bool) bool {
 	}
 	return true
 }
-func compactChanges(lines []string, bits, opposite []bool) {
-	compactChangesUsing(lines, bits, opposite, nil)
-}
 
 func compactChangesUsing(lines []string, bits, opposite []bool, chooseEnd func([]string, int, int, int) int) {
 	r, other := firstRange(bits), firstRange(opposite)

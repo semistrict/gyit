@@ -10,10 +10,23 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestMissingPublicRepositoryIsNotMounted(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/repos/acme/") {
+			name := strings.TrimPrefix(r.URL.Path, "/repos/acme/")
+			switch name {
+			case "private-repo":
+				fmt.Fprint(w, `{"name":"private-repo","private":true,"owner":{"login":"acme"}}`)
+			case "internal-repo":
+				fmt.Fprint(w, `{"name":"internal-repo","visibility":"internal","owner":{"login":"acme"}}`)
+			default:
+				http.NotFound(w, r)
+			}
+			return
+		}
 		if r.URL.Path != "/orgs/acme/repos" {
 			t.Errorf("unexpected API %s", r.URL)
 		}
@@ -45,6 +58,38 @@ func TestMissingPublicRepositoryIsNotMounted(t *testing.T) {
 	}
 	if _, err := f.Lookup(t.Context(), "acme/existing"); err != nil {
 		t.Fatalf("public repository missing: %v", err)
+	}
+}
+
+func TestRepositoryLookupDoesNotListOwner(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.URL.Path != "/repos/acme/project" {
+			t.Errorf("single repository lookup enumerated unrelated repositories: %s", r.URL)
+			http.Error(w, "unexpected lookup", http.StatusBadRequest)
+			return
+		}
+		fmt.Fprint(w, `{"name":"project","visibility":"public","owner":{"login":"acme"}}`)
+	}))
+	defer server.Close()
+	opts, _, _ := fixture(t)
+	opts.APIBase = server.URL
+	f, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, path := range []string{"acme/project", "acme/project@main", "acme/project"} {
+		if _, err := f.Lookup(t.Context(), path); err != nil {
+			t.Fatalf("public repository lookup: %v", err)
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("repeated repository validation: %d calls", calls.Load())
+	}
+	if len(f.jobs) != 0 {
+		t.Fatal("validation started an import")
 	}
 }
 
@@ -129,6 +174,39 @@ func TestListingFailureIsNotCachedAsEmptySuccess(t *testing.T) {
 	for range 2 {
 		if _, err := f.ReadDir(t.Context(), "acme", "", 128); err == nil {
 			t.Fatal("listing failure hidden")
+		}
+	}
+}
+
+// A missing repository is a definitive answer: repeated probes (Finder asks for
+// .DS_Store and ._* under every owner) must not spend the API rate limit.
+// Transient failures such as rate limiting are retried soon.
+func TestRepositoryCheckCachesMissingLikeSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/acme/limited" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	opts, _, _ := fixture(t)
+	opts.APIBase = server.URL
+	f, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for path, want := range map[string]time.Duration{"acme/.DS_Store": 5 * time.Minute, "acme/limited": 10 * time.Second} {
+		start := time.Now()
+		if _, err := f.Lookup(t.Context(), path); err == nil {
+			t.Fatalf("Lookup(%q) succeeded", path)
+		}
+		f.mu.Lock()
+		ttl := f.repositoryChecks[strings.ToLower(path)].expires.Sub(start)
+		f.mu.Unlock()
+		if ttl < want || ttl > want+time.Minute {
+			t.Fatalf("Lookup(%q) cached for %v; want %v", path, ttl, want)
 		}
 	}
 }

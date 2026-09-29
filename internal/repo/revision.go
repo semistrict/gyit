@@ -60,9 +60,6 @@ func (r *Repository) openRevision(ctx context.Context, m manifest, revision, cur
 		base = "HEAD"
 	}
 	target, err := resolveName(ctx, objects, refs, base, current, m.Format)
-	if err != nil && r.progressive.ResolveRevision != nil && (!isHexRevision(base) || len(base) < 40) {
-		target.sha, err = r.progressive.ResolveRevision(ctx, base)
-	}
 	if err != nil {
 		return nil, err
 	}

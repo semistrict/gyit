@@ -25,19 +25,7 @@ func (p *Progressive) historyBytes(ctx context.Context, ref pageRef) ([]byte, er
 		if err != nil {
 			return nil, err
 		}
-		if len(packed) == 0 || len(packed) > progressiveContainerBytes {
-			return nil, fmt.Errorf("history container size")
-		}
-		pages, err := decodeDirectoryContainer(ctx, packed)
-		if err != nil {
-			return nil, err
-		}
-		container := &pb.FileHistoryCachedContainer{}
-		for offset, page := range pages {
-			container.Frames = append(container.Frames, &pb.FileHistoryCachedFrame{Offset: offset, Length: page.length, Hash: page.hash, Data: page.raw})
-		}
-		sort.Slice(container.Frames, func(i, j int) bool { return container.Frames[i].Offset < container.Frames[j].Offset })
-		return proto.Marshal(container)
+		return decodeHistoryContainer(ctx, packed)
 	})
 	defer release()
 	if errors.Is(err, errDirectoryExpansion) {
@@ -57,18 +45,56 @@ func (p *Progressive) historyBytes(ctx context.Context, ref pageRef) ([]byte, er
 	}
 	// Scan protobuf frame envelopes in the mmap without copying unrelated pages.
 	// Copy only the selected frame before releasing the cache mapping.
+	var result []byte
+	err = visitHistoryFrames(data, func(offset, length int64, hash, payload []byte) (bool, error) {
+		if offset != ref.Offset {
+			return true, nil
+		}
+		if length != ref.Length || string(hash) != ref.Hash {
+			return false, fmt.Errorf("history checksum")
+		}
+		result = append([]byte{}, payload...)
+		return false, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("missing history frame")
+	}
+	return result, nil
+}
+
+func decodeHistoryContainer(ctx context.Context, packed []byte) ([]byte, error) {
+	if len(packed) == 0 || len(packed) > progressiveContainerBytes {
+		return nil, fmt.Errorf("history container size")
+	}
+	pages, err := decodeDirectoryContainer(ctx, packed)
+	if err != nil {
+		return nil, err
+	}
+	container := &pb.FileHistoryCachedContainer{}
+	for offset, page := range pages {
+		container.Frames = append(container.Frames, &pb.FileHistoryCachedFrame{Offset: offset, Length: page.length, Hash: page.hash, Data: page.raw})
+	}
+	sort.Slice(container.Frames, func(i, j int) bool { return container.Frames[i].Offset < container.Frames[j].Offset })
+	return proto.Marshal(container)
+}
+
+// Callback byte slices borrow the cache mapping and must not escape the call.
+func visitHistoryFrames(data []byte, visit func(offset, length int64, hash, payload []byte) (bool, error)) error {
 	for len(data) > 0 {
 		num, typ, n := protowire.ConsumeTag(data)
 		if n < 0 {
-			return nil, protowire.ParseError(n)
+			return protowire.ParseError(n)
 		}
 		data = data[n:]
 		if num != 1 || typ != protowire.BytesType {
-			return nil, fmt.Errorf("invalid cached history container")
+			return fmt.Errorf("invalid cached history container")
 		}
 		frame, n := protowire.ConsumeBytes(data)
 		if n < 0 {
-			return nil, protowire.ParseError(n)
+			return protowire.ParseError(n)
 		}
 		data = data[n:]
 		var offset, length int64
@@ -76,14 +102,14 @@ func (p *Progressive) historyBytes(ctx context.Context, ref pageRef) ([]byte, er
 		for len(frame) > 0 {
 			num, typ, n = protowire.ConsumeTag(frame)
 			if n < 0 {
-				return nil, protowire.ParseError(n)
+				return protowire.ParseError(n)
 			}
 			frame = frame[n:]
 			switch {
 			case (num == 1 || num == 2) && typ == protowire.VarintType:
 				value, n := protowire.ConsumeVarint(frame)
 				if n < 0 {
-					return nil, protowire.ParseError(n)
+					return protowire.ParseError(n)
 				}
 				frame = frame[n:]
 				if num == 1 {
@@ -94,7 +120,7 @@ func (p *Progressive) historyBytes(ctx context.Context, ref pageRef) ([]byte, er
 			case (num == 3 || num == 4) && typ == protowire.BytesType:
 				value, n := protowire.ConsumeBytes(frame)
 				if n < 0 {
-					return nil, protowire.ParseError(n)
+					return protowire.ParseError(n)
 				}
 				frame = frame[n:]
 				if num == 3 {
@@ -103,15 +129,12 @@ func (p *Progressive) historyBytes(ctx context.Context, ref pageRef) ([]byte, er
 					payload = value
 				}
 			default:
-				return nil, fmt.Errorf("invalid cached history frame")
+				return fmt.Errorf("invalid cached history frame")
 			}
 		}
-		if offset == ref.Offset {
-			if length != ref.Length || string(hash) != ref.Hash {
-				return nil, fmt.Errorf("history checksum")
-			}
-			return append([]byte(nil), payload...), nil
+		if more, err := visit(offset, length, hash, payload); err != nil || !more {
+			return err
 		}
 	}
-	return nil, fmt.Errorf("missing history frame")
+	return nil
 }

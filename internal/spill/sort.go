@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 )
 
@@ -194,9 +195,70 @@ func (s *Sorter) Walk(ctx context.Context, emit func(key, value []byte) error) e
 	return merge(ctx, s.runs, emit)
 }
 
+// Take consumes another sorter's records, treating them as newer than this
+// sorter's existing records. It moves its staging directory instead of reading,
+// copying and sorting every record again. Both directories must be on the same
+// filesystem, and other must have an equal or smaller run budget. A successful
+// transfer closes other; its later Close cannot remove the transferred files.
+// On failure both sorters retain their records and can still be closed or read.
+func (s *Sorter) Take(other *Sorter) error {
+	if s.closed || other.closed {
+		return os.ErrClosed
+	}
+	if s == other || other.limit > s.limit {
+		return fmt.Errorf("invalid sort transfer or incompatible run budget")
+	}
+	if len(s.runs) == 0 && len(other.runs) == 0 && other.used <= s.limit-s.used {
+		// Small stages keep their owned buffers and never write a disk run.
+		if err := os.RemoveAll(other.dir); err != nil {
+			return err
+		}
+		base := len(s.rows)
+		for _, r := range other.rows {
+			r.sequence += base
+			s.rows = append(s.rows, r)
+		}
+		s.used += other.used
+		other.rows, other.dir, other.closed = nil, "", true
+		return nil
+	}
+	if err := s.flush(); err != nil {
+		return err
+	}
+	if err := other.flush(); err != nil {
+		return err
+	}
+	// A private parent gives rename a non-existent destination without a
+	// name-allocation race. The single rename transfers even nested inputs.
+	dir, err := os.MkdirTemp(s.dir, "take-*")
+	if err != nil {
+		return err
+	}
+	destination := filepath.Join(dir, "runs")
+	paths := make([]string, len(other.runs))
+	for i, path := range other.runs {
+		relative, err := filepath.Rel(other.dir, path)
+		if err != nil {
+			_ = os.Remove(dir)
+			return err
+		}
+		paths[i] = filepath.Join(destination, relative)
+	}
+	if err := os.Rename(other.dir, destination); err != nil {
+		_ = os.Remove(dir)
+		return err
+	}
+	s.runs = append(s.runs, paths...)
+	other.rows, other.runs, other.dir, other.closed = nil, nil, "", true
+	return nil
+}
+
 func (s *Sorter) Close() error {
 	s.closed = true
 	s.rows = nil
+	if s.dir == "" {
+		return nil
+	}
 	return os.RemoveAll(s.dir)
 }
 

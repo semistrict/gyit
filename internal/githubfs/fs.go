@@ -170,6 +170,7 @@ type FS struct {
 	cache             *store.DiskCache
 	lock              *os.File
 	listings          map[string]listing
+	repositoryChecks  map[string]listing
 	listingFlight     singleflight.Group
 }
 
@@ -331,7 +332,6 @@ func (f *FS) start(j *job) {
 		j.mu.Unlock()
 		f.changed(j.display)
 		f.startProgressiveBackground(p, s, j)
-		return
 	}()
 }
 

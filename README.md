@@ -89,13 +89,18 @@ Run these inside a mounted repository:
 ```sh
 gyit status
 gyit log --oneline -n 10
+gyit log -n 10 README.md
 gyit log --follow -- README.md
 gyit update
 ```
 
 The CLI discovers the mount's protobuf control endpoint by walking up from the
-current directory. If requested commits are not available yet, `gyit log`
-acquires the needed history ahead of the background job. The mount currently
+current directory. A literal `gyit log FILE` streams entries from an all-path
+index built newest-first in the background. It waits at missing coverage and
+resumes the same request when the next batch becomes available. Closing the
+pager does not stop ingestion. Other log forms can acquire missing commits on
+demand. See [progressive path history](docs/HISTORY_STREAMING.md) for the storage
+layout and measured limitations. The mount currently
 exposes status, log, and update; other history/view implementations remain
 available internally but are not exposed by the mount. Native Git commands are
 not supported: no virtual `.git` directory is created.

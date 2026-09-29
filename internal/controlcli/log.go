@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"gyit/internal/control"
 	pb "gyit/internal/gen/gyit/control/v1"
@@ -19,13 +18,13 @@ func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	f := flag.NewFlagSet("log", flag.ContinueOnError)
 	f.SetOutput(stderr)
 	socket := f.String("socket", "", "mount control socket (default: discover from current directory)")
-	timeout := f.Duration("timeout", 5*time.Minute, "maximum time for log output (including cold history acquisition)")
+	timeout := f.Duration("timeout", 0, "maximum time for log output (0 waits until completion or cancellation)")
 	oneline := f.Bool("oneline", false, "show abbreviated IDs and subjects")
 	follow := f.Bool("follow", false, "continue file history across renames")
 	firstParent := f.Bool("first-parent", false, "follow only the first parent at merges")
-	count := repo.DefaultLogCount
-	f.IntVar(&count, "n", repo.DefaultLogCount, "number of commits (0..1000)")
-	f.IntVar(&count, "max-count", repo.DefaultLogCount, "number of commits (0..1000)")
+	count := 0
+	f.IntVar(&count, "n", 0, "limit the number of commits (default: all)")
+	f.IntVar(&count, "max-count", 0, "limit the number of commits (default: all)")
 	var normalized, paths []string
 	separated := false
 	for _, arg := range args {
@@ -55,11 +54,17 @@ func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	if count < 0 || count > repo.MaxLogCount {
 		return fmt.Errorf("log count must be between 0 and %d", repo.MaxLogCount)
 	}
+	unlimited := true
+	f.Visit(func(flag *flag.Flag) {
+		if flag.Name == "n" || flag.Name == "max-count" {
+			unlimited = false
+		}
+	})
 	if separated && f.NArg() > 1 {
 		return fmt.Errorf("usage: gyit log [--oneline] [-n COUNT] [--first-parent] [REVISION] [-- PATH...]")
 	}
-	if *timeout <= 0 {
-		return fmt.Errorf("--timeout must be positive")
+	if *timeout < 0 {
+		return fmt.Errorf("--timeout must not be negative")
 	}
 	revision := ""
 	if f.NArg() > 0 {
@@ -85,12 +90,15 @@ func runLog(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		}
 		converted[i] = []byte(p)
 	}
-	request := &pb.LogRequest{Revision: revision, MaxCount: uint32(count), FirstParent: *firstParent, FullCommitIds: !*oneline, Paths: converted, Follow: *follow, PathPrefix: location[0]}
+	request := &pb.LogRequest{Revision: revision, MaxCount: uint32(count), Unlimited: unlimited, FirstParent: *firstParent, FullCommitIds: !*oneline, Paths: converted, Follow: *follow, PathPrefix: location[0]}
 	if possiblePath {
 		request.PossiblePath, request.Paths = converted[0], converted[1:]
 	}
-	ctx, cancel := context.WithTimeout(ctx, *timeout)
-	defer cancel()
+	if *timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *timeout)
+		defer cancel()
+	}
 	client := control.Client{Endpoint: *socket}
 	first := true
 	return client.LogPaths(ctx, request, func(entry *pb.LogEntry) error {

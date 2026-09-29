@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"google.golang.org/protobuf/proto"
+	pb "gyit/internal/gen/gyit/storage/v1"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,7 +42,7 @@ func TestIngestedHistoryFirstQuery(t *testing.T) {
 	if _, err := Import(t.Context(), backend, ImportOptions{Repo: dir}); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"never-queried", "nested/also-new"} {
+	for _, path := range []string{"never-queried", "nested/also-new", "nested/"} {
 		for _, count := range []int{1, 100} {
 			ro := &historyReadOnlyStore{Store: backend}
 			p, err := NewProgressive(t.Context(), ro, nil, t.TempDir())
@@ -67,7 +67,8 @@ func TestIngestedHistoryFirstQuery(t *testing.T) {
 	}
 }
 
-func TestIngestedHistoryClockSkewAndMerges(t *testing.T) {
+func historySkewFixture(t *testing.T) string {
+	t.Helper()
 	dir := t.TempDir()
 	command(t, dir, "init", "-qb", "main")
 	var stream strings.Builder
@@ -90,6 +91,12 @@ func TestIngestedHistoryClockSkewAndMerges(t *testing.T) {
 		t.Fatalf("%v %s", err, out)
 	}
 	command(t, dir, "symbolic-ref", "HEAD", "refs/heads/c159")
+
+	return dir
+}
+
+func TestIngestedHistoryClockSkewAndMerges(t *testing.T) {
+	dir := historySkewFixture(t)
 	backend, _ := store.NewLocal(t.TempDir())
 	if _, err := Import(t.Context(), backend, ImportOptions{Repo: dir}); err != nil {
 		t.Fatal(err)
@@ -149,7 +156,8 @@ func TestIngestedHistoryUpdatesAndFailedPublication(t *testing.T) {
 	if err = ingest(first); err != nil {
 		t.Fatal(err)
 	}
-	_, before, err := p.fileHistoryState(t.Context(), first, "dir099")
+	var before pb.HistoryBatchLocation
+	err = p.get(t.Context(), historyBatchKey+first, &before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,10 +183,10 @@ func TestIngestedHistoryUpdatesAndFailedPublication(t *testing.T) {
 	if string(head) != string(afterHead) {
 		t.Fatal("failed publication changed HEAD")
 	}
-	if _, _, err = p.fileHistoryState(t.Context(), second, "dir000/file"); !errors.Is(err, ErrHistoryIndexPending) {
+	if err = p.get(t.Context(), historyBatchKey+second, &pb.HistoryBatchLocation{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unpublished history visible: %v", err)
 	}
-	if _, _, err = p.fileHistoryState(t.Context(), first, "dir000/file"); err != nil {
+	if err = p.get(t.Context(), historyBatchKey+first, &pb.HistoryBatchLocation{}); err != nil {
 		t.Fatal(err)
 	}
 	fault.failHead = false
@@ -193,12 +201,13 @@ func TestIngestedHistoryUpdatesAndFailedPublication(t *testing.T) {
 		t.Fatalf("one-file update wrote %d bytes", counted.bytes)
 	}
 	t.Logf("one-file update: %d bytes, %d writes", counted.bytes, counted.puts)
-	_, after, err := p.fileHistoryState(t.Context(), second, "dir099")
+	var after pb.HistoryBatchLocation
+	err = p.get(t.Context(), historyBatchKey+first, &after)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !proto.Equal(before.Directory, after.Directory) {
-		t.Fatal("unchanged directory was rewritten")
+	if before.Batch.Hash != after.Batch.Hash || before.Ordinal != after.Ordinal {
+		t.Fatal("covered history was rewritten")
 	}
 	for _, sha := range []string{first, second} {
 		assertFileHistory(t, local, dir, sha, "dir000/file")
@@ -218,7 +227,7 @@ func TestIngestedHistoryUpdatesAndFailedPublication(t *testing.T) {
 	if err = p.IngestHistory(ctx, third, filepath.Join(dir, ".git")); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation: %v", err)
 	}
-	if _, _, err = p.fileHistoryState(t.Context(), third, "dir000/file"); !errors.Is(err, ErrHistoryIndexPending) {
+	if err = p.get(t.Context(), historyBatchKey+third, &pb.HistoryBatchLocation{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("canceled history visible: %v", err)
 	}
 }
@@ -236,7 +245,7 @@ func assertFileHistory(t *testing.T, backend store.Store, source, sha, path stri
 	}
 	ro.denyPacks = true
 	var got []string
-	err = snapshot.LogWithOptions(t.Context(), LogOptions{Count: 100, Paths: []string{path}, FullCommitIDs: true}, func(e LogEntry) error { got = append(got, e.SHA); return nil })
+	err = snapshot.LogWithOptions(t.Context(), LogOptions{Unlimited: true, Paths: []string{path}, FullCommitIDs: true}, func(e LogEntry) error { got = append(got, e.SHA); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

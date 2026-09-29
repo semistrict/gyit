@@ -12,13 +12,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sys/unix"
+	"google.golang.org/protobuf/proto"
 	pb "gyit/internal/gen/gyit/storage/v1"
+	"gyit/internal/spill"
 	"gyit/internal/store"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/trace"
 	"strings"
 )
 
@@ -26,40 +28,66 @@ import (
 // Metadata comes from pack headers (delta result lengths from their prefixes),
 // not a full reconstruction/verification pass over historical file bodies.
 func (p *Progressive) ImportPacks(ctx context.Context, gitdir string) error {
-	files, err := filepath.Glob(filepath.Join(gitdir, "objects", "pack", "pack-*.idx"))
+	records, err := spill.New(p.temp, 1<<20)
 	if err != nil {
 		return err
 	}
+	defer records.Close()
+	changed, err := p.stagePackRecords(ctx, gitdir, records.Add)
+	if err != nil || !changed {
+		return err
+	}
+	metadata := newPublicationUploads(ctx, p.store)
+	defer metadata.close()
+	p.writer.Lock()
+	defer p.writer.Unlock()
+	return p.publishIndex(ctx, metadata, func(idx *index) (pageRef, error) { return idx.updateSorted(ctx, records) })
+}
+
+// Stream recipes directly to bounded staging, without constructing a second
+// temporary database. Successful return joins all immutable uploads; the caller
+// can then publish these records atomically, optionally with prepared history.
+func (p *Progressive) stagePackRecords(ctx context.Context, gitdir string, add func([]byte, []byte) error) (bool, error) {
+	region := trace.StartRegion(ctx, "pack-stage-records")
+	defer region.End()
+	files, err := filepath.Glob(filepath.Join(gitdir, "objects", "pack", "pack-*.idx"))
+	if err != nil {
+		return false, err
+	}
 	uploads := newPublicationUploads(ctx, p.store)
 	defer uploads.close()
-	return p.stage(func(changes *bolt.Bucket) error {
-		for _, file := range files {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			id := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(file), "pack-"), ".idx")
-			if !validProgressiveOID(id) {
-				return fmt.Errorf("invalid pack identity")
-			}
-			var known pb.ProgressiveObject
-			if err := p.get(ctx, "pack/"+id, &known); err == nil {
-				continue
-			} else if !errors.Is(err, store.ErrNotFound) {
-				return err
-			}
-			if err := p.importPack(ctx, uploads, file, id, changes); err != nil {
-				return err
-			}
+	changed := false
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return false, err
 		}
-		if key, _ := changes.Cursor().First(); key == nil {
-			return nil
+		id := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(file), "pack-"), ".idx")
+		if !validProgressiveOID(id) {
+			return false, fmt.Errorf("invalid pack identity")
 		}
-		p.writer.Lock()
-		defer p.writer.Unlock()
-		return p.publishUploads(ctx, changes, uploads)
-	})
+		var known pb.ProgressiveObject
+		if err := p.get(ctx, "pack/"+id, &known); err == nil {
+			continue
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return false, err
+		}
+		trace.WithRegion(ctx, "pack-scan-recipes", func() { err = p.importPack(ctx, uploads, file, id, add) })
+		if err != nil {
+			return false, err
+		}
+		changed = true
+	}
+	trace.WithRegion(ctx, "pack-upload-wait", func() { err = uploads.wait() })
+	return changed, err
 }
-func (p *Progressive) importPack(ctx context.Context, backend store.Store, indexPath, id string, b *bolt.Bucket) error {
+func (p *Progressive) importPack(ctx context.Context, backend store.Store, indexPath, id string, add func([]byte, []byte) error) error {
+	put := func(key string, value *pb.ProgressiveObject) error {
+		raw, err := proto.Marshal(value)
+		if err != nil {
+			return err
+		}
+		return add([]byte(key), raw)
+	}
 	idx, err := os.ReadFile(indexPath)
 	if err != nil {
 		return err
@@ -150,11 +178,11 @@ func (p *Progressive) importPack(ctx context.Context, backend store.Store, index
 		if st.Size() <= 1<<20 && kind == 1 && size <= 64<<10 {
 			p.cacheCommit(ctx, oid, in, size)
 		}
-		if err = progressivePut(b, "g/"+oid, &pb.ProgressiveObject{Pack: id, PackSize: st.Size(), Offset: int64(off), Size: size}); err != nil {
+		if err = put("g/"+oid, &pb.ProgressiveObject{Pack: id, PackSize: st.Size(), Offset: int64(off), Size: size}); err != nil {
 			return err
 		}
 	}
-	return progressivePut(b, "pack/"+id, &pb.ProgressiveObject{Pack: id, PackSize: st.Size()})
+	return put("pack/"+id, &pb.ProgressiveObject{Pack: id, PackSize: st.Size()})
 }
 
 func (p *Progressive) cacheCommit(ctx context.Context, oid string, in io.Reader, size int64) {
