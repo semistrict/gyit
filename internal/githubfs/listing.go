@@ -69,37 +69,87 @@ func (f *FS) publicRepository(ctx context.Context, t Target) error {
 	}
 	// Direct traversal must not paginate an entire organization before fetching
 	// one repository. Readdir still obtains the complete public listing.
-	key := strings.ToLower(t.Owner + "/" + t.Repository)
+	return f.check(ctx, "repo/"+strings.ToLower(t.Owner+"/"+t.Repository), func(ctx context.Context) error {
+		response, err := f.repositoryRequest(ctx, "/repos/"+url.PathEscape(t.Owner)+"/"+url.PathEscape(t.Repository))
+		if err != nil {
+			return err
+		}
+		defer response.Body.Close()
+		var r remoteRepository
+		if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&r); err != nil {
+			return err
+		}
+		if r.Private || (r.Visibility != "" && r.Visibility != "public") || !strings.EqualFold(r.Owner.Login, t.Owner) || !strings.EqualFold(r.Name, t.Repository) {
+			return syscall.ENOENT
+		}
+		return nil
+	})
+}
+
+// An owner name is a directory only when GitHub has that user or organization.
+// The kernel looks names up before mkdir and Finder probes names; neither may
+// make a name appear. Owners with known repositories need no request.
+func (f *FS) publicOwner(ctx context.Context, owner string) error {
 	f.mu.Lock()
-	checked, ok := f.repositoryChecks[key]
+	known := f.owners[owner]
+	cached, listed := f.listings[owner]
 	f.mu.Unlock()
-	if ok && time.Now().Before(checked.expires) {
-		return checked.err
+	if known || listed && cached.err == nil && time.Now().Before(cached.expires) {
+		return nil
 	}
-	result := f.listingFlight.DoChan("repo/"+key, func() (any, error) {
+	if f.preparedOnly {
+		return syscall.ENOENT
+	}
+	if f.opts.APIBase == "" && f.opts.RemoteBase != "https://github.com" {
+		return nil
+	}
+	return f.check(ctx, "owner/"+owner, func(ctx context.Context) error {
+		response, err := f.repositoryRequest(ctx, "/users/"+url.PathEscape(owner))
+		if err != nil {
+			return err
+		}
+		defer response.Body.Close()
+		var r struct{ Login string }
+		if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&r); err != nil {
+			return err
+		}
+		if !strings.EqualFold(r.Login, owner) {
+			return syscall.ENOENT
+		}
+		return nil
+	})
+}
+
+type check struct {
+	err     error
+	expires time.Time
+}
+
+// check answers an existence question from a bounded, expiring cache. One
+// request per key is in flight; it belongs to the filesystem, so a caller that
+// stops waiting does not cancel it for others.
+func (f *FS) check(ctx context.Context, key string, request func(context.Context) error) error {
+	f.mu.Lock()
+	cached, ok := f.checks[key]
+	f.mu.Unlock()
+	if ok && time.Now().Before(cached.expires) {
+		return cached.err
+	}
+	result := f.listingFlight.DoChan("check/"+key, func() (any, error) {
 		call, cancel := context.WithTimeout(f.ctx, 30*time.Second)
 		defer cancel()
-		response, err := f.repositoryRequest(call, "/repos/"+url.PathEscape(t.Owner)+"/"+url.PathEscape(t.Repository))
-		if err == nil {
-			var r remoteRepository
-			err = json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&r)
-			response.Body.Close()
-			if err == nil && (r.Private || (r.Visibility != "" && r.Visibility != "public") || !strings.EqualFold(r.Owner.Login, t.Owner) || !strings.EqualFold(r.Name, t.Repository)) {
-				err = syscall.ENOENT
-			}
-		}
-		ttl := listingTTL(err)
+		err := request(call)
 		f.mu.Lock()
-		if f.repositoryChecks == nil {
-			f.repositoryChecks = make(map[string]listing)
+		if f.checks == nil {
+			f.checks = make(map[string]check)
 		}
-		if len(f.repositoryChecks) >= 256 {
-			for k := range f.repositoryChecks {
-				delete(f.repositoryChecks, k)
+		if len(f.checks) >= 1024 {
+			for k := range f.checks {
+				delete(f.checks, k)
 				break
 			}
 		}
-		f.repositoryChecks[key] = listing{err: err, expires: time.Now().Add(ttl)}
+		f.checks[key] = check{err: err, expires: time.Now().Add(listingTTL(err))}
 		f.mu.Unlock()
 		return nil, err
 	})

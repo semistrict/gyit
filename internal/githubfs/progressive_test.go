@@ -2,6 +2,7 @@ package githubfs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -83,5 +84,32 @@ func TestProgressiveMountBeforeHistoryAndDurableReads(t *testing.T) {
 		if string(b) != tc.want {
 			t.Fatalf("pinned snapshot content %q", b)
 		}
+	}
+}
+
+// Shared repository setup belongs to the filesystem: cancelling the request
+// that happened to start it must not break the repository for later readers.
+func TestCancelledFirstRequestDoesNotBreakSetup(t *testing.T) {
+	opts, _, _ := fixture(t)
+	f, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	target := Target{Owner: "acme", Repository: "project"}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := f.progressiveRepository(cancelled, target); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled request returned %v", err)
+	}
+	p, err := f.progressiveRepository(t.Context(), target)
+	if err != nil {
+		t.Fatalf("setup after cancelled first request: %v", err)
+	}
+	if _, _, err := f.prepareProgressive(t.Context(), target, func(string) {}); err != nil {
+		t.Fatalf("prepare after cancelled first request: %v", err)
+	}
+	if p.reader == nil {
+		t.Fatal("setup left no reader")
 	}
 }

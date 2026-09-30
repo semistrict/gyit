@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -214,4 +215,73 @@ func TestHistoryReadViewChoosesOneSourceAndFallsBackForUpdates(t *testing.T) {
 		t.Fatalf("combined windows: %v want %s", got, want)
 	}
 
+}
+
+// Read views are bounded process-wide. A consumer that stops reading (a paused
+// pager) must not keep one: other file-history queries proceed, and the paused
+// query resumes with complete results once its consumer reads again.
+func TestPausedFileLogsDoNotHoldReadViews(t *testing.T) {
+	dir := historySkewFixture(t)
+	sha := command(t, dir, "rev-parse", "HEAD")
+	command(t, dir, "repack", "-ad")
+	backend, _ := store.NewLocal(t.TempDir())
+	p, err := NewProgressive(t.Context(), backend, nil, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.ImportPacks(t.Context(), filepath.Join(dir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	p.UsePublishedHistorySources(filepath.Join(dir, ".git"))
+	snapshot, err := p.Open(t.Context(), sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := command(t, dir, "log", "--format=%H", "-n", "10", sha, "--", "hot")
+	query := func(ctx context.Context, emitted func()) (string, error) {
+		var got []string
+		err := snapshot.LogWithOptions(ctx, LogOptions{Count: 10, FullCommitIDs: true, Paths: []string{"hot"}}, func(e LogEntry) error {
+			got = append(got, e.SHA)
+			emitted()
+			return nil
+		})
+		return strings.Join(got, "\n"), err
+	}
+	type result struct {
+		got string
+		err error
+	}
+	resume := make(chan struct{})
+	paused := make(chan struct{}, cap(historyReadViews))
+	results := make(chan result, cap(historyReadViews))
+	for range cap(historyReadViews) {
+		var once sync.Once
+		go func() {
+			got, err := query(t.Context(), func() {
+				once.Do(func() {
+					paused <- struct{}{}
+					<-resume
+				})
+			})
+			results <- result{got, err}
+		}()
+	}
+	for range cap(historyReadViews) {
+		<-paused
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	got, err := query(ctx, func() {})
+	if err != nil || got != want {
+		t.Fatalf("query while other pagers are paused: %v\n%s", err, got)
+	}
+	close(resume)
+	for range cap(historyReadViews) {
+		if r := <-results; r.err != nil || r.got != want {
+			t.Fatalf("resumed query: %v\n%s", r.err, r.got)
+		}
+	}
+	if len(historyReadViews) != 0 {
+		t.Fatal("query leaked its acquisition view")
+	}
 }

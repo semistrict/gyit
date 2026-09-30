@@ -439,7 +439,7 @@ func (s *Snapshot) indexedFileLog(ctx context.Context, path string, opt LogOptio
 			if err := s.abbreviateLogParents(ctx, &entry); err != nil {
 				return err
 			}
-			if err := emit(entry); err != nil {
+			if err := view.yield(func() error { return emit(entry) }); err != nil {
 				return err
 			}
 			written++

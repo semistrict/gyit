@@ -3,11 +3,15 @@ package control
 import (
 	"context"
 	"errors"
-	pb "gyit/internal/gen/gyit/control/v1"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	pb "gyit/internal/gen/gyit/control/v1"
+	"gyit/internal/repo"
 )
 
 func TestLogOperationsAllowColdHistoryAcquisition(t *testing.T) {
@@ -72,5 +76,57 @@ func TestStreamingLogUsesCallerCancellation(t *testing.T) {
 	case <-stopped:
 	case <-time.After(time.Second):
 		t.Fatal("disconnected reader left handler running")
+	}
+}
+
+// Log streams are open-ended: a paused pager holds one indefinitely. Any
+// number of them up to the stream budget must leave the request budget free,
+// so status and update still work.
+func TestPausedLogStreamsDoNotBlockShortRequests(t *testing.T) {
+	dir, err := os.MkdirTemp("", "gyit-stream-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	c := New(nil, &repo.Snapshot{SHA: strings.Repeat("a", 40), Tree: "tree"})
+	paused := make(chan struct{}, maxStreams)
+	endpoint := filepath.Join(dir, "control.sock")
+	server, err := ListenStream(t.Context(), endpoint, func(ctx context.Context, req *pb.Request, send func(*pb.Response) error) error {
+		if req.GetLog() == nil {
+			return send(c.Handle(ctx, req))
+		}
+		paused <- struct{}{}
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	client := Client{Endpoint: endpoint}
+	var pagers sync.WaitGroup
+	defer pagers.Wait()
+	defer cancel()
+	for range maxStreams {
+		pagers.Add(1)
+		go func() {
+			defer pagers.Done()
+			_ = client.LogPaths(ctx, &pb.LogRequest{Unlimited: true}, func(*pb.LogEntry) error { return nil })
+		}()
+	}
+	for range maxStreams {
+		select {
+		case <-paused:
+		case <-time.After(5 * time.Second):
+			t.Fatal("log streams were not all admitted")
+		}
+	}
+	statusCtx, stop := context.WithTimeout(t.Context(), 2*time.Second)
+	defer stop()
+	s, err := client.Status(statusCtx)
+	if err != nil || s.Sha != c.Current().SHA {
+		t.Fatalf("status with %d paused log streams: %v %v", maxStreams, s, err)
 	}
 }

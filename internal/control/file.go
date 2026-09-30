@@ -24,13 +24,13 @@ type FileServer struct {
 	handler StreamHandler
 	mu      sync.Mutex
 	closed  bool
-	slots   chan struct{}
+	admit   *admission
 	workers sync.WaitGroup
 }
 
 func NewFileServer(ctx context.Context, handler StreamHandler) *FileServer {
 	ctx, cancel := context.WithCancel(ctx)
-	return &FileServer{ctx: ctx, cancel: cancel, handler: handler, slots: make(chan struct{}, maxConnections)}
+	return &FileServer{ctx: ctx, cancel: cancel, handler: handler, admit: newAdmission()}
 }
 
 func (s *FileServer) Open() (net.Conn, error) {
@@ -40,7 +40,7 @@ func (s *FileServer) Open() (net.Conn, error) {
 		return nil, net.ErrClosed
 	}
 	select {
-	case s.slots <- struct{}{}:
+	case s.admit.requests <- struct{}{}:
 	default:
 		return nil, fmt.Errorf("too many open control requests")
 	}
@@ -48,8 +48,7 @@ func (s *FileServer) Open() (net.Conn, error) {
 	s.workers.Add(1)
 	go func() {
 		defer s.workers.Done()
-		defer func() { <-s.slots }()
-		serveConnection(s.ctx, server, s.handler)
+		serveConnection(s.ctx, server, s.handler, s.admit)
 	}()
 	return client, nil
 }

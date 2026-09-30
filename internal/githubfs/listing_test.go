@@ -203,10 +203,66 @@ func TestRepositoryCheckCachesMissingLikeSuccess(t *testing.T) {
 			t.Fatalf("Lookup(%q) succeeded", path)
 		}
 		f.mu.Lock()
-		ttl := f.repositoryChecks[strings.ToLower(path)].expires.Sub(start)
+		ttl := f.checks["repo/"+strings.ToLower(path)].expires.Sub(start)
 		f.mu.Unlock()
 		if ttl < want || ttl > want+time.Minute {
 			t.Fatalf("Lookup(%q) cached for %v; want %v", path, ttl, want)
 		}
+	}
+}
+
+// An owner directory exists only when GitHub has that user or organization.
+// Looking a name up (the kernel does, before mkdir) must neither succeed nor
+// add it to the root listing; names that cannot be logins never reach the API.
+func TestOwnerLookupRequiresGitHubOwner(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		switch r.URL.Path {
+		case "/users/acme":
+			fmt.Fprint(w, `{"login":"Acme","type":"Organization"}`)
+		case "/users/limited":
+			w.WriteHeader(http.StatusForbidden)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	opts, _, _ := fixture(t)
+	opts.APIBase = server.URL
+	f, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for range 2 {
+		if _, err := f.Lookup(t.Context(), "acme"); err != nil {
+			t.Fatalf("existing owner: %v", err)
+		}
+		if _, err := f.Lookup(t.Context(), "mailpath"); !errors.Is(err, syscall.ENOENT) {
+			t.Fatalf("missing owner: %v", err)
+		}
+	}
+	if _, err := f.Lookup(t.Context(), "limited"); !errors.Is(err, syscall.EACCES) {
+		t.Fatalf("rate-limited owner check: %v", err)
+	}
+	for _, name := range []string{".DS_Store", "._acme", "a_b", "-lead", strings.Repeat("a", 40)} {
+		if _, err := f.Lookup(t.Context(), name); !errors.Is(err, syscall.ENOENT) {
+			t.Fatalf("Lookup(%q) = %v; want ENOENT", name, err)
+		}
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("%d owner API requests; want one each for acme, mailpath and limited", got)
+	}
+	entries, err := f.ReadDir(t.Context(), "", "", 128)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name)
+	}
+	if strings.Join(names, ",") != "acme" {
+		t.Fatalf("root listing %v; want only acme", names)
 	}
 }

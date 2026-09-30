@@ -38,7 +38,7 @@ func (f *FS) startEarlyAncestry(p *progressiveRepository, sha string) {
 	f.mu.Lock()
 	if f.closed {
 		f.mu.Unlock()
-		<-p.ancestryOperations
+		p.ancestryOperations.release()
 		return
 	}
 	f.wg.Add(1)
@@ -48,7 +48,7 @@ func (f *FS) startEarlyAncestry(p *progressiveRepository, sha string) {
 	go func() {
 		defer f.wg.Done()
 		defer close(a.done)
-		defer func() { <-p.ancestryOperations }()
+		defer p.ancestryOperations.release()
 		a.err = f.fetchHistory(f.ctx, p.ancestrySource, sha, 0)
 	}()
 }
@@ -86,12 +86,10 @@ func (f *FS) acquireHistoryWindow(ctx context.Context, p *progressiveRepository,
 		defer f.wg.Done()
 		acquire, cancel := context.WithTimeout(f.ctx, 30*time.Second)
 		defer cancel()
-		select {
-		case p.historyOperations <- struct{}{}:
-		case <-acquire.Done():
-			return nil, acquire.Err()
+		if err := p.historyOperations.acquire(acquire); err != nil {
+			return nil, err
 		}
-		defer func() { <-p.historyOperations }()
+		defer p.historyOperations.release()
 		// Explicit wants must include promised trees even if a commit-only request
 		// previously acquired the commit. This is not a query-specific path index.
 		err := f.runHistoryFetch(acquire, p.historySource, "-c", "fetch.negotiationAlgorithm=noop", "fetch", "--quiet", "--keep", "--no-tags", "--no-auto-maintenance", "--no-write-fetch-head", "--filter=blob:none", "--depth=64", "origin", sha)

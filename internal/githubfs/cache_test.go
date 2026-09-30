@@ -2,6 +2,7 @@ package githubfs
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -146,7 +147,11 @@ func storeContents(t *testing.T, root string) map[string][32]byte {
 func cacheAllocation(t *testing.T, root string) int64 {
 	t.Helper()
 	var total int64
+	// Eviction runs concurrently; an entry removed mid-walk occupies no space.
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -154,6 +159,9 @@ func cacheAllocation(t *testing.T, root string) int64 {
 			return nil
 		}
 		info, err := entry.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}

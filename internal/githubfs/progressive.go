@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -19,35 +21,47 @@ import (
 
 const progressiveDirectory = "repositories-progressive-v1"
 
-type progressiveRepository struct {
-	backend            store.Store
-	once               sync.Once
-	err                error
-	reader             *repo.Progressive
-	source             string
-	historySource      string
-	ancestrySource     string
-	ancestryOperations chan struct{}
-	earlyMu            sync.Mutex
-	earlyAncestry      *ancestryAcquisition
-	snapshotSource     string
-	snapshotOperations chan struct{}
-	historyOperations  chan struct{}
-	historyDemands     singleflight.Group
-	remote             string
-	operations         chan struct{}
-	background         sync.Map
-}
+// A lane serializes one kind of acquisition against one Git source.
+type lane chan struct{}
 
-func (p *progressiveRepository) lock(ctx context.Context) error {
+func newLane() lane { return make(lane, 1) }
+func (l lane) acquire(ctx context.Context) error {
 	select {
-	case p.operations <- struct{}{}:
+	case l <- struct{}{}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
-func (p *progressiveRepository) unlock() { <-p.operations }
+func (l lane) release() { <-l }
+
+// Shared setup belongs to the filesystem lifetime, never to the request that
+// starts it: that caller may give up waiting, and a failure is retried later.
+// Fields assigned by setup are read only after ready.
+type progressiveRepository struct {
+	setup          singleflight.Group
+	ready          atomic.Bool
+	backend        store.Store
+	reader         *repo.Progressive
+	source         string
+	historySource  string
+	ancestrySource string
+	earlyMu        sync.Mutex
+	earlyAncestry  *ancestryAcquisition
+	snapshotSource string
+	historyDemands singleflight.Group
+	remote         string
+	background     sync.Map
+
+	// Lanes are independent so a long transfer in one never stalls another.
+	// source has two: blob fetches leave its shallow boundary alone, while Git
+	// allows only one fetch at a time to move it (shallow.lock).
+	blobOperations     lane
+	shallowOperations  lane
+	historyOperations  lane
+	snapshotOperations lane
+	ancestryOperations lane
+}
 
 func (f *FS) progressiveRepository(ctx context.Context, t Target) (*progressiveRepository, error) {
 	key := t.Owner + "/" + t.Repository
@@ -57,128 +71,160 @@ func (f *FS) progressiveRepository(ctx context.Context, t Target) (*progressiveR
 	}
 	p := f.progressiveRepos[key]
 	if p == nil {
-		p = &progressiveRepository{operations: make(chan struct{}, 1), historyOperations: make(chan struct{}, 1), snapshotOperations: make(chan struct{}, 1), ancestryOperations: make(chan struct{}, 1)}
+		p = &progressiveRepository{blobOperations: newLane(), shallowOperations: newLane(), historyOperations: newLane(), snapshotOperations: newLane(), ancestryOperations: newLane()}
 		f.progressiveRepos[key] = p
 	}
 	f.mu.Unlock()
-	p.once.Do(func() {
-		dir := filepath.Join(f.opts.DataDir, progressiveDirectory, storeID(t, ""))
-		p.source = filepath.Join(dir, "acquisition.git")
-		p.remote = strings.TrimRight(f.opts.RemoteBase, "/") + "/" + t.Owner + "/" + t.Repository + ".git"
-		if p.err = os.MkdirAll(p.source, 0700); p.err != nil {
-			return
+	if p.ready.Load() {
+		return p, nil
+	}
+	result := p.setup.DoChan("", func() (any, error) {
+		if p.ready.Load() {
+			return nil, nil
 		}
-		if out, err := f.git(ctx, p.source, "init", "--bare", "--quiet").CombinedOutput(); err != nil {
-			p.err = fmt.Errorf("initialize acquisition: %w: %s", err, out)
-			return
+		f.mu.Lock()
+		if f.closed {
+			f.mu.Unlock()
+			return nil, context.Canceled
 		}
-		for _, kv := range [][2]string{{"remote.origin.url", p.remote}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "blob:none"}, {"gc.auto", "0"}, {"maintenance.auto", "false"}} {
-			if out, err := f.git(ctx, p.source, "config", kv[0], kv[1]).CombinedOutput(); err != nil {
-				p.err = fmt.Errorf("configure acquisition: %w: %s", err, out)
-				return
-			}
+		f.wg.Add(1)
+		f.mu.Unlock()
+		defer f.wg.Done()
+		if err := f.setupProgressive(f.ctx, p, t); err != nil {
+			return nil, err
 		}
+		p.ready.Store(true)
+		return nil, nil
+	})
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-result:
+		if r.Err != nil {
+			return nil, r.Err
+		}
+		return p, nil
+	}
+}
+
+func closeStore(s store.Store) error {
+	if c, ok := s.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
+// setupProgressive is idempotent, so a failed attempt is simply repeated.
+func (f *FS) setupProgressive(ctx context.Context, p *progressiveRepository, t Target) error {
+	dir := filepath.Join(f.opts.DataDir, progressiveDirectory, storeID(t, ""))
+	p.source = filepath.Join(dir, "acquisition.git")
+	p.remote = strings.TrimRight(f.opts.RemoteBase, "/") + "/" + t.Owner + "/" + t.Repository + ".git"
+	if err := os.MkdirAll(p.source, 0700); err != nil {
+		return err
+	}
+	if out, err := f.git(ctx, p.source, "init", "--bare", "--quiet").CombinedOutput(); err != nil {
+		return fmt.Errorf("initialize acquisition: %w: %s", err, out)
+	}
+	for _, kv := range [][2]string{{"remote.origin.url", p.remote}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "blob:none"}, {"gc.auto", "0"}, {"maintenance.auto", "false"}} {
+		if out, err := f.git(ctx, p.source, "config", kv[0], kv[1]).CombinedOutput(); err != nil {
+			return fmt.Errorf("configure acquisition: %w: %s", err, out)
+		}
+	}
+	// A retry keeps the reader opened by an earlier, partly failed attempt.
+	if p.reader == nil {
 		location := filepath.Join(dir, "objects")
 		if f.opts.StoreRoot != "" {
 			location = strings.TrimRight(f.opts.StoreRoot, "/") + "/" + storeID(t, "")
 		}
 		backend, err := store.Open(ctx, location, "", "")
 		if err != nil {
-			p.err = err
-			return
+			return err
 		}
-		p.backend = backend
-		p.reader, p.err = repo.NewProgressive(ctx, backend, f.cache, dir)
-		if p.err != nil {
-			return
+		reader, err := repo.NewProgressive(ctx, backend, f.cache, dir)
+		if err != nil {
+			return errors.Join(err, closeStore(backend))
 		}
+		p.backend, p.reader = backend, reader
+	}
 
-		// Keep foreground commit acquisition independent of long background fetches.
-		// Both lanes publish into the same immutable pool through its single writer.
-		p.historySource = filepath.Join(dir, "history-demand.git")
-		if out, err := f.git(ctx, "", "init", "--bare", "--quiet", p.historySource).CombinedOutput(); err != nil {
-			p.err = fmt.Errorf("initialize history acquisition: %w: %s", err, out)
-			return
+	// Keep foreground commit acquisition independent of long background fetches.
+	// Both lanes publish into the same immutable pool through its single writer.
+	p.historySource = filepath.Join(dir, "history-demand.git")
+	if out, err := f.git(ctx, "", "init", "--bare", "--quiet", p.historySource).CombinedOutput(); err != nil {
+		return fmt.Errorf("initialize history acquisition: %w: %s", err, out)
+	}
+	for _, kv := range [][2]string{{"remote.origin.url", p.remote}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "tree:0"}, {"gc.auto", "0"}, {"maintenance.auto", "false"}} {
+		if out, err := f.git(ctx, p.historySource, "config", kv[0], kv[1]).CombinedOutput(); err != nil {
+			return fmt.Errorf("configure history acquisition: %w: %s", err, out)
 		}
-		for _, kv := range [][2]string{{"remote.origin.url", p.remote}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "tree:0"}, {"gc.auto", "0"}, {"maintenance.auto", "false"}} {
-			if out, err := f.git(ctx, p.historySource, "config", kv[0], kv[1]).CombinedOutput(); err != nil {
-				p.err = fmt.Errorf("configure history acquisition: %w: %s", err, out)
-				return
-			}
+	}
+	p.snapshotSource = filepath.Join(dir, "snapshot-acquisition.git")
+	if out, err := f.git(ctx, "", "init", "--bare", "--quiet", p.snapshotSource).CombinedOutput(); err != nil {
+		return fmt.Errorf("initialize snapshot acquisition: %w: %s", err, out)
+	}
+	// Keep this source free of shallow boundaries. Expanding a shallow
+	// source makes the server rebuild ancestry packs instead of using its
+	// fast full-fetch path. Incremental updates still negotiate known refs.
+	p.ancestrySource = filepath.Join(dir, "ancestry.git")
+	if out, err := f.git(ctx, "", "init", "--bare", "--quiet", p.ancestrySource).CombinedOutput(); err != nil {
+		return fmt.Errorf("initialize ancestry acquisition: %w: %s", err, out)
+	}
+	for _, kv := range [][2]string{{"remote.origin.url", p.remote}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "blob:none"}, {"gc.auto", "0"}, {"maintenance.auto", "false"}} {
+		if out, err := f.git(ctx, p.ancestrySource, "config", kv[0], kv[1]).CombinedOutput(); err != nil {
+			return fmt.Errorf("configure ancestry acquisition: %w: %s", err, out)
 		}
-		p.snapshotSource = filepath.Join(dir, "snapshot-acquisition.git")
-		if out, err := f.git(ctx, "", "init", "--bare", "--quiet", p.snapshotSource).CombinedOutput(); err != nil {
-			p.err = fmt.Errorf("initialize snapshot acquisition: %w: %s", err, out)
-			return
+	}
+	p.reader.UsePublishedHistorySources(p.ancestrySource, p.historySource, p.source)
+	p.reader.DemandHistory = func(ctx context.Context, sha string) error { return f.acquireHistoryWindow(ctx, p, sha) }
+	p.reader.DemandCommits = func(ctx context.Context, oids []string, depth int) error {
+		if err := p.historyOperations.acquire(ctx); err != nil {
+			return err
 		}
-		// Keep this source free of shallow boundaries. Expanding a shallow
-		// source makes the server rebuild ancestry packs instead of using its
-		// fast full-fetch path. Incremental updates still negotiate known refs.
-		p.ancestrySource = filepath.Join(dir, "ancestry.git")
-		if out, err := f.git(ctx, "", "init", "--bare", "--quiet", p.ancestrySource).CombinedOutput(); err != nil {
-			p.err = fmt.Errorf("initialize ancestry acquisition: %w: %s", err, out)
-			return
-		}
-		for _, kv := range [][2]string{{"remote.origin.url", p.remote}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "blob:none"}, {"gc.auto", "0"}, {"maintenance.auto", "false"}} {
-			if out, err := f.git(ctx, p.ancestrySource, "config", kv[0], kv[1]).CombinedOutput(); err != nil {
-				p.err = fmt.Errorf("configure ancestry acquisition: %w: %s", err, out)
-				return
-			}
-		}
-		p.reader.UsePublishedHistorySources(p.ancestrySource, p.historySource, p.source)
-		p.reader.DemandHistory = func(ctx context.Context, sha string) error { return f.acquireHistoryWindow(ctx, p, sha) }
-		p.reader.DemandCommits = func(ctx context.Context, oids []string, depth int) error {
-			select {
-			case p.historyOperations <- struct{}{}:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			defer func() { <-p.historyOperations }()
-			var missing []string
-			for _, oid := range oids {
-				if _, err := p.reader.ObjectSize(ctx, oid); errors.Is(err, store.ErrNotFound) {
-					missing = append(missing, oid)
-				} else if err != nil {
-					return err
-				}
-			}
-			if len(missing) == 0 {
-				return nil
-			}
-			cmd := f.git(ctx, p.historySource, "fetch", "--quiet", "--keep", "--no-tags", "--no-auto-maintenance", "--no-write-fetch-head", "--filter=tree:0", fmt.Sprintf("--depth=%d", max(1, min(depth, 64))), "--stdin", "origin")
-			cmd.Stdin = strings.NewReader(strings.Join(missing, "\n") + "\n")
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("fetch requested history: %w: %s", err, f.redact(string(out)))
-			}
-			return p.reader.ImportPacks(ctx, p.historySource)
-		}
-		p.reader.Demand = func(ctx context.Context, oids []string) error {
-			if err := p.lock(ctx); err != nil {
+		defer p.historyOperations.release()
+		var missing []string
+		for _, oid := range oids {
+			if _, err := p.reader.ObjectSize(ctx, oid); errors.Is(err, store.ErrNotFound) {
+				missing = append(missing, oid)
+			} else if err != nil {
 				return err
 			}
-			defer p.unlock()
-			missing := make([]string, 0, len(oids))
-			for _, oid := range oids {
-				if _, err := p.reader.ObjectSize(ctx, oid); errors.Is(err, store.ErrNotFound) {
-					missing = append(missing, oid)
-				} else if err != nil {
-					return err
-				}
-			}
-			if len(missing) == 0 {
-				return nil
-			}
-			// Match Git's promisor fetch: known commits do not imply that their
-			// promised blobs are present, so these explicit wants skip negotiation.
-			cmd := f.git(ctx, p.source, "-c", "fetch.negotiationAlgorithm=noop", "fetch", "--quiet", "--keep", "--no-tags", "--no-auto-maintenance", "--no-write-fetch-head", "--filter=blob:none", "--stdin", "origin")
-			cmd.Stdin = strings.NewReader(strings.Join(missing, "\n") + "\n")
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("fetch requested files: %w: %s", err, f.redact(string(out)))
-			}
-			return p.reader.ImportPacks(ctx, p.source)
 		}
-	})
-	return p, p.err
+		if len(missing) == 0 {
+			return nil
+		}
+		cmd := f.git(ctx, p.historySource, "fetch", "--quiet", "--keep", "--no-tags", "--no-auto-maintenance", "--no-write-fetch-head", "--filter=tree:0", fmt.Sprintf("--depth=%d", max(1, min(depth, 64))), "--stdin", "origin")
+		cmd.Stdin = strings.NewReader(strings.Join(missing, "\n") + "\n")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("fetch requested history: %w: %s", err, f.redact(string(out)))
+		}
+		return p.reader.ImportPacks(ctx, p.historySource)
+	}
+	p.reader.Demand = func(ctx context.Context, oids []string) error {
+		if err := p.blobOperations.acquire(ctx); err != nil {
+			return err
+		}
+		defer p.blobOperations.release()
+		missing := make([]string, 0, len(oids))
+		for _, oid := range oids {
+			if _, err := p.reader.ObjectSize(ctx, oid); errors.Is(err, store.ErrNotFound) {
+				missing = append(missing, oid)
+			} else if err != nil {
+				return err
+			}
+		}
+		if len(missing) == 0 {
+			return nil
+		}
+		// Match Git's promisor fetch: known commits do not imply that their
+		// promised blobs are present, so these explicit wants skip negotiation.
+		cmd := f.git(ctx, p.source, "-c", "fetch.negotiationAlgorithm=noop", "fetch", "--quiet", "--keep", "--no-tags", "--no-auto-maintenance", "--no-write-fetch-head", "--filter=blob:none", "--stdin", "origin")
+		cmd.Stdin = strings.NewReader(strings.Join(missing, "\n") + "\n")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("fetch requested files: %w: %s", err, f.redact(string(out)))
+		}
+		return p.reader.ImportPacks(ctx, p.source)
+	}
+	return nil
 }
 func (f *FS) prepareProgressive(ctx context.Context, t Target, progress func(string)) (*progressiveRepository, *repo.Snapshot, error) {
 	p, err := f.progressiveRepository(ctx, t)
@@ -195,7 +241,7 @@ func (f *FS) prepareProgressive(ctx context.Context, t Target, progress func(str
 		// network transfer alongside depth-one setup, but defer Store import
 		// until the ordinary background history worker takes ownership.
 		f.startEarlyAncestry(p, sha)
-		if err = p.lock(ctx); err != nil {
+		if err = p.shallowOperations.acquire(ctx); err != nil {
 			return nil, nil, err
 		}
 		progress("Fetching current snapshot trees (depth one, blobless)…")
@@ -205,7 +251,7 @@ func (f *FS) prepareProgressive(ctx context.Context, t Target, progress func(str
 		if e == nil {
 			e = p.reader.ImportPacks(ctx, p.source)
 		}
-		p.unlock()
+		p.shallowOperations.release()
 		if e != nil {
 			return nil, nil, fmt.Errorf("fetch snapshot trees: %w: %s", e, f.redact(string(out)))
 		}
@@ -295,12 +341,10 @@ func (f *FS) startProgressiveBackground(p *progressiveRepository, s *repo.Snapsh
 }
 
 func (f *FS) prepareBackgroundSnapshot(ctx context.Context, p *progressiveRepository, s *repo.Snapshot) error {
-	select {
-	case p.snapshotOperations <- struct{}{}:
-	case <-ctx.Done():
-		return ctx.Err()
+	if err := p.snapshotOperations.acquire(ctx); err != nil {
+		return err
 	}
-	defer func() { <-p.snapshotOperations }()
+	defer p.snapshotOperations.release()
 	prepared, err := p.reader.HasPreparedSnapshot(ctx)
 	if err != nil {
 		return err
@@ -379,33 +423,7 @@ func (f *FS) ingestBackgroundHistory(ctx context.Context, p *progressiveReposito
 			early := p.takeEarlyAncestry(s.SHA)
 			go func() {
 				defer close(fullDone)
-				if early != nil {
-					select {
-					case <-ctx.Done():
-						fullErr = ctx.Err()
-						return
-					case <-early.done:
-						fullErr = early.err
-					}
-					if fullErr != nil {
-						return
-					}
-				}
-				select {
-				case p.ancestryOperations <- struct{}{}:
-				case <-ctx.Done():
-					fullErr = ctx.Err()
-					return
-				}
-				defer func() { <-p.ancestryOperations }()
-				if early == nil {
-					fullErr = f.fetchHistory(ctx, p.ancestrySource, s.SHA, 0)
-				}
-				if fullErr == nil {
-					close(fullAcquired)
-					progress("Indexing full ancestry while acquired objects publish…")
-					fullErr = p.reader.ImportHistoryPacks(ctx, s.SHA, p.ancestrySource)
-				}
+				fullErr = f.acquireFullAncestry(ctx, p, s.SHA, early, fullAcquired, progress)
 			}()
 		}
 		// Publish the first shallow window without delay. Later windows give
@@ -433,7 +451,7 @@ func (f *FS) ingestBackgroundHistory(ctx context.Context, p *progressiveReposito
 		}
 		progress(fmt.Sprintf("File history: %d commits indexed; acquiring older ancestry…", coverage.CoveredCommits))
 		select {
-		case p.operations <- struct{}{}:
+		case p.shallowOperations <- struct{}{}:
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-fullDone:
@@ -469,7 +487,7 @@ func (f *FS) ingestBackgroundHistory(ctx context.Context, p *progressiveReposito
 			progress(fmt.Sprintf("File history: %d commits indexed; publishing acquired objects…", coverage.CoveredCommits))
 			err = p.reader.ImportPacks(ctx, p.source)
 		}
-		p.unlock()
+		p.shallowOperations.release()
 		if fullReady {
 			return waitFull()
 		}
@@ -478,6 +496,32 @@ func (f *FS) ingestBackgroundHistory(ctx context.Context, p *progressiveReposito
 		}
 		deepen = min(deepen*16, 16384)
 	}
+}
+
+// acquireFullAncestry closes acquired once the complete ancestry is local, then
+// indexes it. An early transfer is speculative: if it failed, fetch again.
+func (f *FS) acquireFullAncestry(ctx context.Context, p *progressiveRepository, sha string, early *ancestryAcquisition, acquired chan<- struct{}, progress func(string)) error {
+	fetched := false
+	if early != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-early.done:
+			fetched = early.err == nil
+		}
+	}
+	if err := p.ancestryOperations.acquire(ctx); err != nil {
+		return err
+	}
+	defer p.ancestryOperations.release()
+	if !fetched {
+		if err := f.fetchHistory(ctx, p.ancestrySource, sha, 0); err != nil {
+			return err
+		}
+	}
+	close(acquired)
+	progress("Indexing full ancestry while acquired objects publish…")
+	return p.reader.ImportHistoryPacks(ctx, sha, p.ancestrySource)
 }
 
 func (f *FS) fetchHistory(ctx context.Context, source, sha string, deepen int) error {

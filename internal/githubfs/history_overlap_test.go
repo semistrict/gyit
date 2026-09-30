@@ -150,7 +150,7 @@ func TestCloseCancelsEarlyHistoryAcquisition(t *testing.T) {
 			t.Fatalf("setup: %v %s", err, out)
 		}
 	}
-	p := &progressiveRepository{ancestrySource: source, ancestryOperations: make(chan struct{}, 1)}
+	p := &progressiveRepository{ancestrySource: source, ancestryOperations: newLane()}
 	sha := strings.Repeat("1", 40)
 	f.startEarlyAncestry(p, sha)
 	select {

@@ -448,6 +448,12 @@ func writeHistoryFrontier(stage *historyStage, save func(proto.Message) (*pb.Pag
 		page = &pb.HistoryFrontierPage{}
 		return nil
 	}
+	// Draining the queue leaves emptied bbolt leaves until commit. bbolt's
+	// reverse cursor mishandles them: Prev stops at the first, and Last never
+	// returns on an emptied multi-page bucket. Commit rebalances them away.
+	if err := stage.checkpoint(); err != nil {
+		return nil, err
+	}
 	for _, name := range []string{"missing", "queue"} {
 		cursor := stage.buckets[name].Cursor()
 		for k, v := cursor.Last(); k != nil; k, v = cursor.Prev() {

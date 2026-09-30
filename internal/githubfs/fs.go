@@ -4,6 +4,7 @@ package githubfs
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -57,6 +58,20 @@ func validName(s string) bool {
 	}
 	return true
 }
+
+// GitHub logins are letters, digits and hyphens, at most 39 characters, and
+// never start with a hyphen. Rejecting other names needs no API request.
+func validOwner(s string) bool {
+	if s == "" || len(s) > 39 || s[0] == '-' {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
 func parse(path string) ([]string, Target, error) {
 	var t Target
 	if path == "" {
@@ -66,7 +81,7 @@ func parse(path string) ([]string, Target, error) {
 		return nil, t, syscall.EINVAL
 	}
 	p := strings.Split(path, "/")
-	if !validName(p[0]) || strings.ContainsAny(p[0], "._") {
+	if !validOwner(p[0]) {
 		return nil, t, syscall.ENOENT
 	}
 	t.Owner = strings.ToLower(p[0])
@@ -170,7 +185,7 @@ type FS struct {
 	cache             *store.DiskCache
 	lock              *os.File
 	listings          map[string]listing
-	repositoryChecks  map[string]listing
+	checks            map[string]check
 	listingFlight     singleflight.Group
 }
 
@@ -222,17 +237,14 @@ func (f *FS) Close() error {
 			j.control.Close()
 		}
 	}
+	var err error
 	for _, p := range f.progressiveRepos {
-		if p.backend != nil {
-			if c, ok := p.backend.(io.Closer); ok {
-				_ = c.Close()
-			}
-		}
+		err = errors.Join(err, closeStore(p.backend))
 	}
 	if f.controlDir != "" {
 		_ = os.RemoveAll(f.controlDir)
 	}
-	err := f.cache.Close()
+	err = errors.Join(err, f.cache.Close())
 	f.lock.Close()
 	return err
 }
@@ -380,6 +392,9 @@ func (f *FS) Lookup(ctx context.Context, path string) (repo.Entry, error) {
 		return directory(""), nil
 	}
 	if len(p) == 1 {
+		if err := f.publicOwner(ctx, t.Owner); err != nil {
+			return repo.Entry{}, err
+		}
 		f.mu.Lock()
 		if len(f.owners) >= 4096 && !f.owners[t.Owner] {
 			f.mu.Unlock()

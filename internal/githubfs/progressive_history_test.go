@@ -115,11 +115,11 @@ func TestProgressiveLogAcquiresBoundedHistory(t *testing.T) {
 
 func TestProgressiveLogDoesNotWaitForBackgroundFetch(t *testing.T) {
 	_, p, s, _, want := historyFixture(t)
-	// Background acquisition owns this lock throughout its network fetch.
-	if err := p.lock(t.Context()); err != nil {
+	// Background deepening owns this lane throughout its network fetch.
+	if err := p.shallowOperations.acquire(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	defer p.unlock()
+	defer p.shallowOperations.release()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	var got []string
@@ -161,9 +161,9 @@ func TestProgressiveFileLogContinuesWhileFullAcquisitionWaits(t *testing.T) {
 
 func TestProgressiveHistoryCancellationReleasesWaitingWorkers(t *testing.T) {
 	f, p, s, _, _ := historyFixture(t)
-	p.operations <- struct{}{}
+	p.shallowOperations <- struct{}{}
 	p.ancestryOperations <- struct{}{}
-	defer func() { <-p.operations; <-p.ancestryOperations }()
+	defer func() { <-p.shallowOperations; <-p.ancestryOperations }()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	waiting := make(chan struct{}, 1)
@@ -192,7 +192,7 @@ func TestProgressiveHistoryCancellationReleasesWaitingWorkers(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("cancellation left an acquisition worker blocked")
 	}
-	if len(p.operations) != 1 || len(p.ancestryOperations) != 1 {
+	if len(p.shallowOperations) != 1 || len(p.ancestryOperations) != 1 {
 		t.Fatal("cancellation released a lane owned by another operation")
 	}
 }
@@ -270,9 +270,9 @@ func TestHistoryFetchCancellationCleansUpAndCanRetry(t *testing.T) {
 // next path query reuses those objects, without fetching a per-path history.
 func TestFileHistoryGapAcquiresSharedWindow(t *testing.T) {
 	_, p, s, oldest, _ := historyFixtureLength(t, 80)
-	p.operations <- struct{}{}
+	p.shallowOperations <- struct{}{}
 	p.ancestryOperations <- struct{}{}
-	defer func() { <-p.operations; <-p.ancestryOperations }()
+	defer func() { <-p.shallowOperations; <-p.ancestryOperations }()
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 	for _, path := range []string{"dir/", "dir/hello"} {
@@ -350,5 +350,74 @@ func TestHistoryWindowOutlivesReaderAndStopsWithMount(t *testing.T) {
 	case <-disconnected:
 	case <-time.After(time.Second):
 		t.Fatal("mount close left fetch connected")
+	}
+}
+
+// A deepen batch moves only the shallow boundary. A foreground file read needs
+// blobs, not ancestry, and must not queue behind a long history transfer.
+func TestFileReadDuringHistoryDeepen(t *testing.T) {
+	f, p, s, _, _ := historyFixtureLength(t, 160)
+	// Keep the full-history lane from superseding the shallow deepen batches.
+	p.ancestryOperations <- struct{}{}
+	defer func() { <-p.ancestryOperations }()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	type result struct {
+		content string
+		err     error
+	}
+	read := make(chan result, 1)
+	var once sync.Once
+	err := f.ingestBackgroundHistory(ctx, p, s, func(message string) {
+		// Reported while the deepen batch owns its lane, before import.
+		if !strings.Contains(message, "publishing acquired objects") {
+			return
+		}
+		once.Do(func() {
+			readCtx, stop := context.WithTimeout(ctx, 2*time.Second)
+			defer stop()
+			e, err := s.Resolve(readCtx, "dir/hello")
+			if err != nil {
+				read <- result{err: err}
+				return
+			}
+			b := make([]byte, e.Size)
+			_, err = s.ReadAt(readCtx, e.OID, b, 0)
+			read <- result{string(b), err}
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case r := <-read:
+		if r.err != nil || r.content != "first revision\n" {
+			t.Fatalf("file read during deepen: %q %v", r.content, r.err)
+		}
+	default:
+		t.Fatal("history completed without a deepen batch")
+	}
+}
+
+// The early ancestry transfer is speculative. Its failure must not abort
+// background history: the full-acquisition lane fetches again.
+func TestFailedEarlyAncestryFallsBackToFullFetch(t *testing.T) {
+	f, p, s, _, _ := historyFixtureLength(t, 160)
+	// Prevent shallow deepening so only the full lane can complete coverage.
+	p.shallowOperations <- struct{}{}
+	defer func() { <-p.shallowOperations }()
+	failed := &ancestryAcquisition{sha: s.SHA, done: make(chan struct{}), err: errors.New("transient network failure")}
+	close(failed.done)
+	p.earlyMu.Lock()
+	p.earlyAncestry = failed
+	p.earlyMu.Unlock()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := f.ingestBackgroundHistory(ctx, p, s, func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	coverage, err := p.reader.HistoryProgress(ctx, s.SHA)
+	if err != nil || !coverage.Complete || coverage.CoveredCommits != 161 {
+		t.Fatalf("coverage after failed early fetch: %v %v", coverage, err)
 	}
 }

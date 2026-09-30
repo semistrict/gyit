@@ -166,3 +166,33 @@ exchange; repository mutation operations still return `EROFS`. The control file
 is not included in directory listings. The ordinary-checkout baseline can remain
 kernel-read-only. An interactive initrd must keep a PID 1 supervisor running
 when the user exits the shell, and should include `less` for the command pager.
+
+## Responsiveness regressions
+
+`verify_nested_kvm_regressions.py` checks, from inside a fresh guest, that
+background work and paused pagers do not starve foreground requests:
+
+- `deepen-reads`: file reads complete while a history `--deepen` batch runs.
+  A host thread watches the server's Git children and publishes the deepen
+  state to the guest through a separate `--cache=never` virtio-fs share.
+- `status-with-paused-logs`: `gyit status` succeeds beside 20 log streams
+  whose output nobody reads (the pipes fill, like paused pagers).
+- `file-log-with-paused-file-logs`: a file log completes beside two paused
+  file-history streams, compared with the same query alone.
+
+Build the Linux server as above and the CLI with
+`GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/gyit`, copy both scripts
+next to each other, and run as root with a fresh store prefix per run:
+
+```sh
+sudo python3 verify_nested_kvm_regressions.py \
+  --server ./gyit-vhost --cli ./gyit \
+  --store gs://BUCKET/PREFIX/github \
+  --kernel /boot/vmlinuz-VERSION-generic \
+  --initrd /boot/initrd.img-VERSION-generic --output /var/tmp/gyit-verify-1
+```
+
+The server imports `torvalds/linux` from GitHub (override with
+`--repository`); its history stays incomplete for the whole run, which the
+checks rely on. Results are in `result.json`. The import is durable data in
+the prefix; remove it during cleanup.

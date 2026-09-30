@@ -14,6 +14,7 @@ import (
 
 const requestTimeout = 30 * time.Second
 const maxConnections = 16
+const maxStreams = 64
 const historyTimeout = 5 * time.Minute
 
 func operationTimeout(req *pb.Request) time.Duration {
@@ -24,6 +25,20 @@ func operationTimeout(req *pb.Request) time.Duration {
 		return historyTimeout
 	}
 	return requestTimeout
+}
+
+// admission bounds concurrent control requests. Each connection is admitted
+// with a request slot. An open-ended stream (a paused pager may hold one
+// indefinitely) trades it for a stream slot once its request is read, so
+// streams never block status or update. With no stream slot free, it keeps
+// its request slot.
+type admission struct {
+	requests chan struct{}
+	streams  chan struct{}
+}
+
+func newAdmission() *admission {
+	return &admission{requests: make(chan struct{}, maxConnections), streams: make(chan struct{}, maxStreams)}
 }
 
 type Handler func(context.Context, *pb.Request) *pb.Response
@@ -81,24 +96,23 @@ func ListenStream(ctx context.Context, path string, handler StreamHandler) (*Ser
 		defer stop()
 		var workers sync.WaitGroup
 		defer workers.Wait()
-		slots := make(chan struct{}, maxConnections)
+		admit := newAdmission()
 		for {
 			select {
-			case slots <- struct{}{}:
+			case admit.requests <- struct{}{}:
 			case <-ctx.Done():
 				return
 			}
 			conn, err := listener.Accept()
 			if err != nil {
-				<-slots
+				<-admit.requests
 				cancel()
 				return
 			}
 			workers.Add(1)
 			go func() {
 				defer workers.Done()
-				defer func() { <-slots }()
-				serveConnection(ctx, conn, handler)
+				serveConnection(ctx, conn, handler, admit)
 			}()
 		}
 	}()
@@ -108,8 +122,11 @@ func ListenStream(ctx context.Context, path string, handler StreamHandler) (*Ser
 // Close cancels in-flight operations, closes their connections, and joins workers.
 func (s *Server) Close() { s.cancel(); <-s.done }
 
-// serveConnection applies identical framing, deadlines and cancellation to both transports.
-func serveConnection(ctx context.Context, conn net.Conn, handler StreamHandler) {
+// serveConnection applies identical framing, deadlines and cancellation to both
+// transports. The caller has taken a request slot; serveConnection releases it.
+func serveConnection(ctx context.Context, conn net.Conn, handler StreamHandler, admit *admission) {
+	slot := admit.requests
+	defer func() { <-slot }()
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
@@ -124,6 +141,12 @@ func serveConnection(ctx context.Context, conn net.Conn, handler StreamHandler) 
 	var reqCtx context.Context
 	var reqCancel context.CancelFunc
 	if timeout == 0 {
+		select {
+		case admit.streams <- struct{}{}:
+			<-slot
+			slot = admit.streams
+		default:
+		}
 		reqCtx, reqCancel = context.WithCancel(ctx)
 		_ = conn.SetDeadline(time.Time{})
 	} else {
